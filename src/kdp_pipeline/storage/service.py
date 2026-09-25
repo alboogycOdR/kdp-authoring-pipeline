@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 from contextlib import contextmanager
 from pathlib import Path
@@ -10,12 +11,15 @@ from sqlalchemy.orm import Session
 
 from kdp_pipeline.core.ids import new_id
 from kdp_pipeline.core.state_machine import TitleState, require_transition
+from kdp_pipeline.models.planning import PlanningArtifactKind, spec_for
 from kdp_pipeline.storage.audit import AuditEventWriter, list_events
 from kdp_pipeline.storage.db import (
     AssetRow,
+    ApprovalRow,
     AuditEventRow,
     JobRow,
     ProjectRow,
+    ProvenanceRow,
     TitleRow,
     engine_for,
     init_db,
@@ -156,6 +160,63 @@ def get_title(root: Path, title_id: str) -> TitleRow | None:
         return session.get(TitleRow, title_id)
 
 
+_CHAPTER_CARD_NAME = re.compile(r"chapter-\d{3}\.md$")
+
+
+def _accepted_planning_asset(session: Session, root: Path, title_id: str, kind: PlanningArtifactKind) -> AssetRow | None:
+    spec = spec_for(kind)
+    title = session.get(TitleRow, title_id)
+    if title is None:
+        return None
+    project = session.get(ProjectRow, title.project_id)
+    if project is None:
+        return None
+    title_root = (root / "projects" / project.project_id / "titles" / title_id).resolve()
+    rows = list(session.scalars(select(AssetRow).where(
+        AssetRow.title_id == title_id,
+        AssetRow.asset_type == spec.asset_type,
+        AssetRow.approval_status == "accepted",
+    )))
+    for asset in rows:
+        approval = session.scalar(select(ApprovalRow).where(
+            ApprovalRow.asset_id == asset.asset_id,
+            ApprovalRow.decision == "accepted",
+        ))
+        provenance = session.scalar(select(ProvenanceRow).where(ProvenanceRow.asset_id == asset.asset_id))
+        path = Path(asset.path)
+        if approval is None or provenance is None or not path.is_file():
+            continue
+        try:
+            relative = path.resolve().relative_to(title_root)
+        except ValueError:
+            continue
+        if kind == PlanningArtifactKind.CHAPTER_CARD:
+            if relative.parent.as_posix() != "04_plan/chapter-cards" or not _CHAPTER_CARD_NAME.search(path.name):
+                continue
+        else:
+            expected = spec.destination_template
+            if relative.as_posix() != expected:
+                continue
+        if sha256_file(path) != asset.sha256 or approval.candidate_hash != asset.sha256:
+            continue
+        return asset
+    return None
+
+
+def _planning_requirements_met(session: Session, root: Path, title_id: str) -> bool:
+    return all(_accepted_planning_asset(session, root, title_id, kind) is not None for kind in (
+        PlanningArtifactKind.POSITIONING,
+        PlanningArtifactKind.BOOK_BRIEF,
+        PlanningArtifactKind.OUTLINE,
+        PlanningArtifactKind.CHAPTER_CARD,
+    ))
+
+
+def planning_requirements_met(root: Path, title_id: str) -> bool:
+    with session_scope(root) as session:
+        return _planning_requirements_met(session, root, title_id)
+
+
 def transition_title(root: Path, title_id: str, target: TitleState, actor_id: str = "cli-user") -> TitleRow:
     with session_scope(root) as session:
         row = session.get(TitleRow, title_id)
@@ -163,6 +224,8 @@ def transition_title(root: Path, title_id: str, target: TitleState, actor_id: st
             raise ValueError(f"Unknown title: {title_id}")
         current = TitleState(row.status)
         require_transition(current, target)
+        if target == TitleState.PLANNED and not _planning_requirements_met(session, root, title_id):
+            raise ValueError("Cannot transition to PLANNED: required accepted planning artefacts are incomplete")
         before = row.status
         row.status = target.value
         AuditEventWriter.append(
@@ -181,6 +244,19 @@ def transition_title(root: Path, title_id: str, target: TitleState, actor_id: st
             _title_snapshot(row),
         )
         return row
+
+
+def advance_to_validated(root: Path, title_id: str, actor_id: str = "cli-user") -> TitleRow:
+    with session_scope(root) as session:
+        if session.get(TitleRow, title_id) is None:
+            raise ValueError(f"Unknown title: {title_id}")
+        if _accepted_planning_asset(session, root, title_id, PlanningArtifactKind.POSITIONING) is None:
+            raise ValueError("Cannot advance to VALIDATED: accepted positioning is required")
+    return transition_title(root, title_id, TitleState.VALIDATED, actor_id)
+
+
+def advance_to_planned(root: Path, title_id: str, actor_id: str = "cli-user") -> TitleRow:
+    return transition_title(root, title_id, TitleState.PLANNED, actor_id)
 
 
 def register_asset(

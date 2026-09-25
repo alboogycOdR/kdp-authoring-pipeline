@@ -114,6 +114,7 @@ class EditorialFinding(BaseModel):
 class Approval(BaseModel):
     approval_id: str
     title_id: str
+    asset_id: str | None = None
     scope: str
     candidate_hash: str
     approver: str

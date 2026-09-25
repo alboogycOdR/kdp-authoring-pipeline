@@ -193,6 +193,7 @@ class GenerationService:
         structured_output_schema: dict[str, Any] | None = None,
         structured_output_schema_ref: str | None = None,
         metadata: dict[str, Any] | None = None,
+        asset_type: str = "generation_output",
     ) -> GenerationRunResult:
         provider_name, model_name = _provider_identity(provider)
         envelope = _input_envelope(
@@ -306,7 +307,7 @@ class GenerationService:
                 asset = AssetRow(
                     asset_id=new_id("AST"),
                     title_id=title_id,
-                    asset_type="generation_output",
+                    asset_type=asset_type,
                     path=str(output_path),
                     version="1.0",
                     sha256=output_hash,

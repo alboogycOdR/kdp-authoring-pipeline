@@ -4,15 +4,21 @@ from pathlib import Path
 import asyncio
 import json
 import typer
+from sqlalchemy import select
 
 from kdp_pipeline.context import ContextManifest
 from kdp_pipeline.core.state_machine import TitleState
+from kdp_pipeline.chapter import ChapterService, accept_chapter
+from kdp_pipeline.continuity import ContinuityService, approve_canon_proposal
+from kdp_pipeline.editorial import EditorialService
 from kdp_pipeline.models.planning import PlanningArtifactKind
 from kdp_pipeline.planning import PlanningService, accept_planning_artifact
 from kdp_pipeline.providers.fake import FakeProvider
 from kdp_pipeline.storage.db import init_db
+from kdp_pipeline.storage.db import CanonProposalRow
 from kdp_pipeline.storage.service import (
     advance_to_planned,
+    advance_to_drafting,
     advance_to_validated,
     create_project,
     create_title,
@@ -28,11 +34,17 @@ brief_app = typer.Typer()
 outline_app = typer.Typer()
 chapter_card_app = typer.Typer()
 planning_app = typer.Typer()
+chapter_app = typer.Typer()
+editorial_app = typer.Typer()
+canon_app = typer.Typer()
 app.add_typer(positioning_app, name="positioning")
 app.add_typer(brief_app, name="brief")
 app.add_typer(outline_app, name="outline")
 app.add_typer(chapter_card_app, name="chapter-card")
 app.add_typer(planning_app, name="planning")
+app.add_typer(chapter_app, name="chapter")
+app.add_typer(editorial_app, name="editorial")
+app.add_typer(canon_app, name="canon")
 
 
 def _root(root: Path | None) -> Path:
@@ -236,6 +248,101 @@ def planning_advance_planned(title_id: str, root: Path | None = typer.Option(Non
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(code=2)
     typer.echo(f"{row.title_id}: {row.status}")
+
+
+@chapter_app.command("advance-drafting")
+def chapter_advance_drafting(title_id: str, root: Path | None = typer.Option(None)):
+    try:
+        row = advance_to_drafting(_root(root), title_id)
+    except ValueError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
+    typer.echo(f"{row.title_id}: {row.status}")
+
+
+def _run_chapter(root: Path, title_id: str, chapter_number: int, operation: str, asset_id: str | None = None, finding_ids: list[str] | None = None):
+    if operation == "draft":
+        return asyncio.run(ChapterService.draft(root, title_id=title_id, chapter_number=chapter_number, provider=FakeProvider()))
+    if operation == "revise":
+        return asyncio.run(ChapterService.revise(root, title_id=title_id, chapter_number=chapter_number, source_asset_id=asset_id or "", provider=FakeProvider(), finding_ids=finding_ids))
+    if operation == "continuity":
+        return asyncio.run(ContinuityService.analyze(root, title_id=title_id, chapter_number=chapter_number, source_asset_id=asset_id or "", provider=FakeProvider()))
+    return asyncio.run(EditorialService.developmental(root, title_id=title_id, chapter_number=chapter_number, source_asset_id=asset_id or "", provider=FakeProvider()))
+
+
+@chapter_app.command("draft")
+def chapter_draft(title_id: str, chapter_number: int, root: Path | None = typer.Option(None)):
+    try:
+        _print_generation_result(_run_chapter(_root(root), title_id, chapter_number, "draft"))
+    except (OSError, ValueError, RuntimeError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
+
+
+@chapter_app.command("continuity")
+def chapter_continuity(title_id: str, chapter_number: int, asset_id: str = typer.Option(...), root: Path | None = typer.Option(None)):
+    try:
+        result = _run_chapter(_root(root), title_id, chapter_number, "continuity", asset_id=asset_id)
+    except (OSError, ValueError, RuntimeError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
+    typer.echo(json.dumps({"finding_id": result.finding.finding_id, "proposal_id": result.proposal.proposal_id, "analysis_asset_id": result.generation.asset.asset_id}))
+
+
+@editorial_app.command("run")
+def editorial_run(title_id: str, chapter_number: int, asset_id: str = typer.Option(...), pass_name: str = typer.Option("developmental", "--pass"), root: Path | None = typer.Option(None)):
+    if pass_name != "developmental":
+        typer.echo("Error: only the developmental pass is implemented in Sprint 4", err=True)
+        raise typer.Exit(code=2)
+    try:
+        result = _run_chapter(_root(root), title_id, chapter_number, "editorial", asset_id=asset_id)
+    except (OSError, ValueError, RuntimeError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
+    typer.echo(json.dumps({"finding_id": result.finding.finding_id, "analysis_asset_id": result.generation.asset.asset_id}))
+
+
+@chapter_app.command("revise")
+def chapter_revise(title_id: str, chapter_number: int, asset_id: str = typer.Option(...), root: Path | None = typer.Option(None)):
+    try:
+        _print_generation_result(_run_chapter(_root(root), title_id, chapter_number, "revise", asset_id=asset_id))
+    except (OSError, ValueError, RuntimeError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
+
+
+@chapter_app.command("accept")
+def chapter_accept(title_id: str, chapter_number: int, asset_id: str = typer.Option(...), reviewer: str = typer.Option(...), root: Path | None = typer.Option(None)):
+    try:
+        result = accept_chapter(_root(root), asset_id, chapter_number=chapter_number, reviewer=reviewer)
+    except (OSError, ValueError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
+    typer.echo(json.dumps({"asset_id": result.accepted_asset.asset_id, "approval_id": result.approval.approval_id, "path": str(result.destination_path)}))
+
+
+@canon_app.command("approve")
+def canon_approve(proposal_id: str, reviewer: str = typer.Option(...), decision: str = typer.Option(...), root: Path | None = typer.Option(None)):
+    try:
+        proposal = approve_canon_proposal(_root(root), proposal_id, reviewer=reviewer, decision=decision)
+    except (OSError, ValueError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
+    typer.echo(f"{proposal.proposal_id}: {proposal.status}")
+
+
+@canon_app.command("proposals")
+def canon_proposals(title_id: str, root: Path | None = typer.Option(None)):
+    from kdp_pipeline.storage.service import session_scope
+
+    try:
+        with session_scope(_root(root)) as session:
+            proposals = list(session.scalars(select(CanonProposalRow).where(CanonProposalRow.title_id == title_id)))
+    except ValueError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
+    for proposal in proposals:
+        typer.echo(json.dumps({"proposal_id": proposal.proposal_id, "status": proposal.status, "entity_id": proposal.entity_id, "field": proposal.field}))
 
 
 if __name__ == "__main__":

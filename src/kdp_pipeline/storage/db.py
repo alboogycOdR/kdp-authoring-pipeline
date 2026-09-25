@@ -108,6 +108,43 @@ class ApprovalRow(Base):
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class EditorialFindingRow(Base):
+    __tablename__ = "editorial_findings"
+    finding_id: Mapped[str] = mapped_column(String, primary_key=True)
+    title_id: Mapped[str] = mapped_column(ForeignKey("titles.title_id"), nullable=False)
+    asset_id: Mapped[str | None] = mapped_column(ForeignKey("assets.asset_id"), nullable=True)
+    pass_type: Mapped[str] = mapped_column(String, nullable=False)
+    severity: Mapped[str] = mapped_column(String, nullable=False)
+    location: Mapped[str] = mapped_column(String, nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    evidence: Mapped[str | None] = mapped_column(Text, nullable=True)
+    recommended_action: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String, nullable=False, default="open")
+    owner: Mapped[str | None] = mapped_column(String, nullable=True)
+    resolution: Mapped[str | None] = mapped_column(Text, nullable=True)
+    snapshot_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class CanonProposalRow(Base):
+    __tablename__ = "canon_proposals"
+    proposal_id: Mapped[str] = mapped_column(String, primary_key=True)
+    title_id: Mapped[str] = mapped_column(ForeignKey("titles.title_id"), nullable=False)
+    finding_id: Mapped[str | None] = mapped_column(ForeignKey("editorial_findings.finding_id"), nullable=True)
+    entity_id: Mapped[str] = mapped_column(String, nullable=False)
+    field: Mapped[str] = mapped_column(String, nullable=False)
+    current_value: Mapped[str | None] = mapped_column(Text, nullable=True)
+    proposed_value: Mapped[str] = mapped_column(Text, nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    evidence_asset_ids_json: Mapped[str] = mapped_column(Text, default="[]")
+    affected_assets_json: Mapped[str] = mapped_column(Text, default="[]")
+    status: Mapped[str] = mapped_column(String, nullable=False, default="proposed")
+    reviewer: Mapped[str | None] = mapped_column(String, nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    snapshot_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class AuditEventRow(Base):
     __tablename__ = "audit_events"
     event_id: Mapped[str] = mapped_column(String, primary_key=True)

@@ -194,6 +194,7 @@ class GenerationService:
         structured_output_schema_ref: str | None = None,
         metadata: dict[str, Any] | None = None,
         asset_type: str = "generation_output",
+        source_ref: str | None = None,
     ) -> GenerationRunResult:
         provider_name, model_name = _provider_identity(provider)
         envelope = _input_envelope(
@@ -313,6 +314,7 @@ class GenerationService:
                     sha256=output_hash,
                     creator_type="ai",
                     creator=generation_result.provider,
+                    source_ref=source_ref,
                     ai_classification="AI_GENERATED",
                     approval_status="experimental",
                     created_at=utcnow(),

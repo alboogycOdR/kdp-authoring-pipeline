@@ -259,6 +259,10 @@ def advance_to_planned(root: Path, title_id: str, actor_id: str = "cli-user") ->
     return transition_title(root, title_id, TitleState.PLANNED, actor_id)
 
 
+def advance_to_drafting(root: Path, title_id: str, actor_id: str = "cli-user") -> TitleRow:
+    return transition_title(root, title_id, TitleState.DRAFTING, actor_id)
+
+
 def register_asset(
     root: Path,
     title_id: str,

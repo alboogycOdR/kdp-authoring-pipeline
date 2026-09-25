@@ -4,5 +4,10 @@ __pycache__/
 *.pyc
 .env
 .kdp/
-projects/*/titles/*/05_drafts/experimental/*
+
+# Python packaging metadata
+*.egg-info/
+
+# Private/unpublished publishing projects
+projects/*
 !projects/.gitkeep

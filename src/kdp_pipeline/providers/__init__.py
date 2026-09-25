@@ -5,10 +5,12 @@ from kdp_pipeline.providers.contracts import (
     RenderedPrompt,
     UsageMetadata,
 )
+from kdp_pipeline.providers.fake import FakeProvider
 
 __all__ = [
     "GenerationRequest",
     "GenerationResult",
+    "FakeProvider",
     "ModelProvider",
     "RenderedPrompt",
     "UsageMetadata",

@@ -72,6 +72,27 @@ class JobRow(Base):
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
+class ProvenanceRow(Base):
+    __tablename__ = "provenance"
+    provenance_id: Mapped[str] = mapped_column(String, primary_key=True)
+    asset_id: Mapped[str] = mapped_column(ForeignKey("assets.asset_id"), nullable=False, unique=True)
+    job_id: Mapped[str | None] = mapped_column(ForeignKey("jobs.job_id"), nullable=True, unique=True)
+    provider: Mapped[str] = mapped_column(String, nullable=False)
+    model: Mapped[str] = mapped_column(String, nullable=False)
+    prompt_template_id: Mapped[str] = mapped_column(String, nullable=False)
+    prompt_template_version: Mapped[str] = mapped_column(String, nullable=False)
+    rendered_prompt_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    input_references_json: Mapped[str] = mapped_column(Text, default="[]")
+    input_hashes_json: Mapped[str] = mapped_column(Text, default="[]")
+    context_manifest_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    output_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    generation_timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    human_contribution_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ai_classification: Mapped[str | None] = mapped_column(String, nullable=True)
+    disclosure_decision: Mapped[str | None] = mapped_column(String, nullable=True)
+    reviewer: Mapped[str | None] = mapped_column(String, nullable=True)
+
+
 class AuditEventRow(Base):
     __tablename__ = "audit_events"
     event_id: Mapped[str] = mapped_column(String, primary_key=True)

@@ -32,6 +32,22 @@ def write_json(path: Path, data: dict) -> None:
         raise
 
 
+def write_text(path: Path, text: str) -> None:
+    """Atomically write a UTF-8 text artefact."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as fh:
+            fh.write(text)
+        os.replace(temp_name, path)
+    except Exception:
+        try:
+            os.unlink(temp_name)
+        except FileNotFoundError:
+            pass
+        raise
+
+
 def create_project_workspace(root: Path, project_id: str, project_name: str) -> Path:
     p = root / "projects" / project_id
     if p.exists():

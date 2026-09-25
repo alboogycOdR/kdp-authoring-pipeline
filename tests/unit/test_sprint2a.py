@@ -12,6 +12,9 @@ from kdp_pipeline.prompts import MissingPromptVariableError, PromptNotFoundError
 
 
 class TinyProvider:
+    provider_name = "tiny-test"
+    model_name = "tiny-test-v1"
+
     async def generate(self, request: GenerationRequest) -> GenerationResult:
         return GenerationResult(provider="fake", model="tiny", text=request.rendered_prompt.rendered_text)
 

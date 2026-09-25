@@ -64,12 +64,15 @@ class ProvenanceRecord(BaseModel):
     provenance_id: str
     asset_id: str
     job_id: str | None = None
-    provider: str | None = None
-    model: str | None = None
-    prompt_template_id: str | None = None
-    prompt_template_version: str | None = None
-    input_asset_ids: list[str] = Field(default_factory=list)
+    provider: str
+    model: str
+    prompt_template_id: str
+    prompt_template_version: str
+    rendered_prompt_sha256: str
+    input_references: list[str] = Field(default_factory=list)
     input_hashes: list[str] = Field(default_factory=list)
+    input_asset_ids: list[str] = Field(default_factory=list)
+    context_manifest_hash: str
     output_hash: str
     generation_timestamp: datetime
     human_contribution_note: str | None = None

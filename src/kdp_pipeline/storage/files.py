@@ -1,18 +1,19 @@
 from __future__ import annotations
 
-import hashlib
 import json
+import hashlib
 import os
 import tempfile
 from pathlib import Path
 
 
+
 def sha256_file(path: Path) -> str:
-    h = hashlib.sha256()
+    digest = hashlib.sha256()
     with path.open("rb") as fh:
         for chunk in iter(lambda: fh.read(1024 * 1024), b""):
-            h.update(chunk)
-    return h.hexdigest()
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def write_json(path: Path, data: dict) -> None:

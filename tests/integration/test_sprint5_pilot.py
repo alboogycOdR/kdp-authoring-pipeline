@@ -13,11 +13,34 @@ from kdp_pipeline.context import ContextManifest
 from kdp_pipeline.models.planning import PlanningArtifactKind
 from kdp_pipeline.planning import PlanningService, accept_planning_artifact
 from kdp_pipeline.storage.db import ApprovalRow, AssetRow, CanonProposalRow, EditorialFindingRow
-from kdp_pipeline.storage.service import session_scope
-from kdp_pipeline.storage.service import create_project, create_title
 from kdp_pipeline.providers import FakeProvider
+from kdp_pipeline.storage.service import (
+    advance_to_drafting,
+    advance_to_planned,
+    advance_to_validated,
+    create_project,
+    create_title,
+    session_scope,
+)
 
-from tests.integration.test_chapter_lifecycle import setup_drafting_title
+
+def setup_drafting_title(tmp_path: Path):
+    shutil.copytree(Path("prompts"), tmp_path / "prompts")
+    project = create_project(tmp_path, "Chapter Project")
+    title = create_title(tmp_path, project.project_id, "Chapter Title")
+    provider = FakeProvider()
+    for kind, chapter_number in ((PlanningArtifactKind.POSITIONING, None), (PlanningArtifactKind.BOOK_BRIEF, None),
+                                 (PlanningArtifactKind.OUTLINE, None), (PlanningArtifactKind.CHAPTER_CARD, 1)):
+        result = asyncio.run(PlanningService.generate(
+            tmp_path, title_id=title.title_id, artifact_kind=kind,
+            context_manifest=ContextManifest(title_id=title.title_id, task_type="planning", inputs=[]),
+            provider=provider, chapter_number=chapter_number,
+        ))
+        accept_planning_artifact(tmp_path, result.asset.asset_id, reviewer="planner", chapter_number=chapter_number)
+    advance_to_validated(tmp_path, title.title_id)
+    advance_to_planned(tmp_path, title.title_id)
+    advance_to_drafting(tmp_path, title.title_id)
+    return project, title, provider
 
 
 def test_repeated_chapter_acceptance_and_analysis_are_idempotent(tmp_path: Path):

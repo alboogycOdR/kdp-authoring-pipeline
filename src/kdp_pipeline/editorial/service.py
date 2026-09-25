@@ -52,8 +52,20 @@ class EditorialService:
             source_ref=source_asset_id, metadata={"chapter_number": chapter_number, "source_asset_id": source_asset_id, "pass_type": "developmental"},
         )
         with session_scope(root) as session:
+            existing_finding = session.scalar(select(EditorialFindingRow).where(
+                EditorialFindingRow.asset_id == generation.asset.asset_id,
+                EditorialFindingRow.pass_type == "developmental",
+            ))
+            if existing_finding is not None:
+                AuditEventWriter.append(
+                    session, actor_id="system", action="editorial.reused", entity_type="finding",
+                    entity_id=existing_finding.finding_id, correlation_id=generation.job.job_id, result="success",
+                    metadata={"analysis_asset_id": generation.asset.asset_id},
+                )
+                session.commit()
+                return EditorialRunResult(generation, existing_finding)
             finding = EditorialFindingRow(
-                finding_id=new_id("FND"), title_id=title_id, asset_id=source_asset_id,
+                finding_id=new_id("FND"), title_id=title_id, asset_id=generation.asset.asset_id,
                 pass_type="developmental", severity="review", location=f"chapter-{chapter_number:03d}",
                 description=generation.generation_result.text, evidence=generation.generation_result.text,
                 recommended_action="Review the developmental findings before deciding on a revision.",

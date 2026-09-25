@@ -11,6 +11,7 @@ from kdp_pipeline.core.state_machine import TitleState
 from kdp_pipeline.chapter import ChapterService, accept_chapter
 from kdp_pipeline.continuity import ContinuityService, approve_canon_proposal
 from kdp_pipeline.editorial import EditorialService
+from kdp_pipeline.inspection import doctor as run_doctor, inspect_title
 from kdp_pipeline.models.planning import PlanningArtifactKind
 from kdp_pipeline.planning import PlanningService, accept_planning_artifact
 from kdp_pipeline.providers.fake import FakeProvider
@@ -37,6 +38,7 @@ planning_app = typer.Typer()
 chapter_app = typer.Typer()
 editorial_app = typer.Typer()
 canon_app = typer.Typer()
+inspect_app = typer.Typer()
 app.add_typer(positioning_app, name="positioning")
 app.add_typer(brief_app, name="brief")
 app.add_typer(outline_app, name="outline")
@@ -45,6 +47,7 @@ app.add_typer(planning_app, name="planning")
 app.add_typer(chapter_app, name="chapter")
 app.add_typer(editorial_app, name="editorial")
 app.add_typer(canon_app, name="canon")
+app.add_typer(inspect_app, name="inspect")
 
 
 def _root(root: Path | None) -> Path:
@@ -343,6 +346,65 @@ def canon_proposals(title_id: str, root: Path | None = typer.Option(None)):
         raise typer.Exit(code=2)
     for proposal in proposals:
         typer.echo(json.dumps({"proposal_id": proposal.proposal_id, "status": proposal.status, "entity_id": proposal.entity_id, "field": proposal.field}))
+
+
+def _print_inspection(title_id: str, root: Path, section: str | None = None) -> None:
+    report = inspect_title(root, title_id)
+    typer.echo(json.dumps(report if section is None else report[section], indent=2, default=str))
+
+
+@inspect_app.command("title")
+def inspect_title_cmd(title_id: str, root: Path | None = typer.Option(None)):
+    try:
+        _print_inspection(title_id, _root(root))
+    except (OSError, ValueError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
+
+
+@inspect_app.command("assets")
+def inspect_assets(title_id: str, root: Path | None = typer.Option(None)):
+    try:
+        _print_inspection(title_id, _root(root), "assets")
+    except (OSError, ValueError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
+
+
+@inspect_app.command("jobs")
+def inspect_jobs(title_id: str, root: Path | None = typer.Option(None)):
+    try:
+        _print_inspection(title_id, _root(root), "jobs")
+    except (OSError, ValueError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
+
+
+@inspect_app.command("provenance")
+def inspect_provenance(title_id: str, root: Path | None = typer.Option(None)):
+    try:
+        _print_inspection(title_id, _root(root), "provenance")
+    except (OSError, ValueError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
+
+
+@inspect_app.command("lifecycle")
+def inspect_lifecycle(title_id: str, root: Path | None = typer.Option(None)):
+    try:
+        report = inspect_title(_root(root), title_id)
+        typer.echo(json.dumps({"title": report["title"], "planning": report["planning"], "chapter_lifecycle": report["chapter_lifecycle"], "inconsistencies": report["inconsistencies"]}, indent=2))
+    except (OSError, ValueError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
+
+
+@app.command("doctor")
+def doctor(root: Path | None = typer.Option(None)):
+    for check in run_doctor(_root(root)):
+        typer.echo(f"{check['status']}: {check['check']} — {check['message']}")
+        if check["status"] != "OK" and check["recommended_action"]:
+            typer.echo(f"  Action: {check['recommended_action']}")
 
 
 if __name__ == "__main__":

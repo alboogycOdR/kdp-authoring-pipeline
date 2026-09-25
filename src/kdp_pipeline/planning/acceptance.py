@@ -57,6 +57,7 @@ def accept_planning_artifact(
     if not reviewer.strip():
         raise PlanningAcceptanceError("reviewer is required")
     destination: Path | None = None
+    copied = False
     try:
         with session_scope(root) as session:
             source = session.get(AssetRow, asset_id)
@@ -79,8 +80,39 @@ def accept_planning_artifact(
             if provenance is None:
                 raise PlanningAcceptanceError("Generated planning assets require provenance before acceptance")
             destination = _destination(title, project, root, kind, chapter_number)
+            existing = session.scalar(select(AssetRow).where(
+                AssetRow.source_ref == source.asset_id,
+                AssetRow.approval_status == "accepted",
+            ))
+            if existing is not None:
+                existing_approval = session.scalar(select(ApprovalRow).where(
+                    ApprovalRow.asset_id == existing.asset_id,
+                    ApprovalRow.decision == "accepted",
+                ))
+                existing_provenance = session.scalar(select(ProvenanceRow).where(ProvenanceRow.asset_id == existing.asset_id))
+                existing_path = Path(existing.path)
+                if (
+                    existing_approval is not None
+                    and existing_provenance is not None
+                    and existing_path.resolve() == destination.resolve()
+                    and existing_path.is_file()
+                    and sha256_file(existing_path) == existing.sha256 == source.sha256
+                ):
+                    AuditEventWriter.append(
+                        session, actor_id=reviewer, action="planning.reused", entity_type="asset",
+                        entity_id=existing.asset_id, correlation_id=source.title_id, result="success",
+                        metadata={"source_asset_id": source.asset_id, "approval_id": existing_approval.approval_id},
+                    )
+                    session.commit()
+                    return PlanningAcceptanceResult(source, existing, existing_approval, existing_path)
+                raise PlanningAcceptanceError("An accepted planning asset already exists with conflicting destination or hash")
+            if destination.exists():
+                if sha256_file(destination) != source.sha256:
+                    raise PlanningAcceptanceError("Accepted planning destination exists with a conflicting hash")
+                raise PlanningAcceptanceError("Accepted planning destination exists without matching accepted state")
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source_path, destination)
+            copied = True
             destination_hash = sha256_file(destination)
             accepted = AssetRow(
                 asset_id=new_id("AST"),
@@ -163,7 +195,7 @@ def accept_planning_artifact(
             session.commit()
             return PlanningAcceptanceResult(source, accepted, approval, destination)
     except Exception:
-        if destination is not None and destination.exists():
+        if copied and destination is not None and destination.exists():
             destination.unlink()
         raise
 

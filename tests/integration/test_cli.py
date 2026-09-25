@@ -39,3 +39,20 @@ def test_cli_errors_are_user_facing(tmp_path: Path):
     result = runner.invoke(app, ["status", "BK-missing", "--root", str(tmp_path)])
     assert result.exit_code == 1
     assert "Error: Unknown title" in result.output
+
+
+def test_cli_inspection_and_read_only_doctor(tmp_path: Path):
+    result = runner.invoke(app, ["doctor", "--root", str(tmp_path)])
+    assert result.exit_code == 0
+    assert "FAIL: sqlite" in result.output
+    assert not (tmp_path / ".kdp").exists()
+
+    result = runner.invoke(app, ["init-project", "Inspect Project", "--root", str(tmp_path)])
+    project_id = result.stdout.strip()
+    result = runner.invoke(app, ["new-title", project_id, "Inspect Title", "--root", str(tmp_path)])
+    title_id = result.stdout.strip()
+    db_before = (tmp_path / ".kdp" / "state.db").read_bytes()
+    result = runner.invoke(app, ["inspect", "title", title_id, "--root", str(tmp_path)])
+    assert result.exit_code == 0
+    assert json.loads(result.stdout)["title"]["status"] == "IDEA"
+    assert (tmp_path / ".kdp" / "state.db").read_bytes() == db_before

@@ -59,8 +59,24 @@ class ContinuityService:
             source_ref=source_asset_id, metadata={"chapter_number": chapter_number, "source_asset_id": source_asset_id},
         )
         with session_scope(root) as session:
+            existing_finding = session.scalar(select(EditorialFindingRow).where(
+                EditorialFindingRow.asset_id == generation.asset.asset_id,
+                EditorialFindingRow.pass_type == "continuity",
+            ))
+            if existing_finding is not None:
+                existing_proposal = session.scalar(select(CanonProposalRow).where(
+                    CanonProposalRow.finding_id == existing_finding.finding_id,
+                ))
+                if existing_proposal is not None:
+                    AuditEventWriter.append(
+                        session, actor_id="system", action="continuity.reused", entity_type="finding",
+                        entity_id=existing_finding.finding_id, correlation_id=generation.job.job_id, result="success",
+                        metadata={"analysis_asset_id": generation.asset.asset_id, "proposal_id": existing_proposal.proposal_id},
+                    )
+                    session.commit()
+                    return ContinuityRunResult(generation, existing_finding, existing_proposal)
             finding = EditorialFindingRow(
-                finding_id=new_id("FND"), title_id=title_id, asset_id=source_asset_id,
+                finding_id=new_id("FND"), title_id=title_id, asset_id=generation.asset.asset_id,
                 pass_type="continuity", severity="review", location=f"chapter-{chapter_number:03d}",
                 description=generation.generation_result.text, evidence=generation.generation_result.text,
                 recommended_action="Review the evidence and decide whether a canon proposal is warranted.",

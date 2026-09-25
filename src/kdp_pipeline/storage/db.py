@@ -93,6 +93,21 @@ class ProvenanceRow(Base):
     reviewer: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
+class ApprovalRow(Base):
+    __tablename__ = "approvals"
+    approval_id: Mapped[str] = mapped_column(String, primary_key=True)
+    title_id: Mapped[str] = mapped_column(ForeignKey("titles.title_id"), nullable=False)
+    asset_id: Mapped[str | None] = mapped_column(ForeignKey("assets.asset_id"), nullable=True)
+    scope: Mapped[str] = mapped_column(String, nullable=False)
+    candidate_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    approver: Mapped[str] = mapped_column(String, nullable=False)
+    decision: Mapped[str] = mapped_column(String, nullable=False)
+    policy_baseline_version: Mapped[str | None] = mapped_column(String, nullable=True)
+    conditions_json: Mapped[str] = mapped_column(Text, default="[]")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class AuditEventRow(Base):
     __tablename__ = "audit_events"
     event_id: Mapped[str] = mapped_column(String, primary_key=True)

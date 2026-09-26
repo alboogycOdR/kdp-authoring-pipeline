@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import ipaddress
 import os
 import re
 import time
@@ -44,7 +45,7 @@ class ProviderResponseError(OpenAICompatibleProviderError):
 class OpenAICompatibleConfig(BaseModel):
     base_url: str = "https://api.openai.com/v1"
     model: str = Field(min_length=1)
-    api_key_env: str = Field(default="OPENAI_API_KEY", min_length=1)
+    api_key_env: str | None = Field(default="OPENAI_API_KEY", min_length=1)
     timeout_seconds: float = Field(default=60.0, gt=0)
 
     @field_validator("base_url")
@@ -71,11 +72,13 @@ class OpenAICompatibleConfig(BaseModel):
         )
 
 
-def _safe_error_identity(value: object) -> str | None:
+def _safe_error_identity(value: object, secret: str | None = None) -> str | None:
     if not isinstance(value, str):
         return None
     # Error type/code are deliberately constrained to short identifier-like values.
     if not re.fullmatch(r"[A-Za-z0-9_.:-]{1,80}", value):
+        return None
+    if secret and secret.casefold() in value.casefold():
         return None
     return value
 
@@ -121,17 +124,23 @@ class OpenAICompatibleProvider:
         return payload
 
     async def generate(self, request: GenerationRequest) -> GenerationResult:
-        api_key = os.getenv(self.config.api_key_env)
-        if not api_key:
+        api_key = os.getenv(self.config.api_key_env) if self.config.api_key_env else None
+        parsed_url = urlparse(self.config.base_url)
+        host = parsed_url.hostname or ""
+        loopback = host == "localhost"
+        try:
+            loopback = loopback or ipaddress.ip_address(host).is_loopback
+        except ValueError:
+            pass
+        if not api_key and not loopback:
             raise ProviderConfigurationError(
-                f"Missing API key in environment variable {self.config.api_key_env}"
+                f"Missing API key in environment variable {self.config.api_key_env or 'OPENAI_API_KEY'}"
             )
 
         payload = self._payload(request)
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        }
+        headers = {"Content-Type": "application/json"}
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
         owned_client = self._client is None
         client = self._client or httpx.AsyncClient(timeout=self.config.timeout_seconds)
         started = time.perf_counter()
@@ -154,8 +163,8 @@ class OpenAICompatibleProvider:
                     error_body = response.json()
                     error = error_body.get("error", {}) if isinstance(error_body, dict) else {}
                     if isinstance(error, dict):
-                        error_type = _safe_error_identity(error.get("type"))
-                        error_code = _safe_error_identity(error.get("code"))
+                        error_type = _safe_error_identity(error.get("type"), api_key)
+                        error_code = _safe_error_identity(error.get("code"), api_key)
                 except (ValueError, json.JSONDecodeError):
                     pass
                 raise ProviderHTTPError(response.status_code, error_type, error_code)
@@ -188,6 +197,12 @@ class OpenAICompatibleProvider:
                 input_tokens=usage.get("prompt_tokens") if isinstance(usage, dict) else None,
                 output_tokens=usage.get("completion_tokens") if isinstance(usage, dict) else None,
                 total_tokens=usage.get("total_tokens") if isinstance(usage, dict) else None,
+                cached_input_tokens=(usage.get("prompt_tokens_details", {}).get("cached_tokens")
+                                     if isinstance(usage, dict) and isinstance(usage.get("prompt_tokens_details"), dict)
+                                     else None),
+                reported_cost=(usage.get("cost") if isinstance(usage, dict)
+                               and isinstance(usage.get("cost"), (int, float)) else None),
+                currency="USD" if isinstance(usage, dict) and isinstance(usage.get("cost"), (int, float)) else None,
             ) if isinstance(usage, dict) else None
 
             response_id = body.get("id") if isinstance(body, dict) else None

@@ -1,4 +1,4 @@
-# KDP Pipeline v0.1 — Sprint 1 Foundation
+# KDP Pipeline — Local Authoring Workflow
 
 This is the first executable scaffold for the local-first KDP authoring pipeline.
 
@@ -50,6 +50,18 @@ kdp audit BK-...
 ```bash
 pytest -q
 ```
+
+## Provider profiles, usage, and budgets
+
+Generation requires an explicitly selected provider profile for the project. Add a profile, check it (offline by default), then select it:
+
+```powershell
+kdp providers add-openai-compatible openai "OpenAI" "gpt-5" --base-url https://api.openai.com/v1 --api-key-env OPENAI_API_KEY
+kdp providers check openai
+kdp providers select openai --project-id PRJ-...
+```
+
+`kdp providers check PROFILE --connect` is the only check command that makes a network request. API-key values are read from the named environment variable at request time; only the variable name is saved. Set credentials in the launching shell/session; `.env.example` is reference-only and is not auto-loaded. Never place credentials in profile notes or metadata. Configure operator-supplied prices with `kdp pricing set`; no current provider prices are built in. Project limits use USD: `kdp budget set PROJECT_ID --monthly-usd 25 --hard-stop` (or `--soft`). With hard-stop enabled, an unpriced model is blocked before invocation. Soft budgets permit it, recording unknown cost and a warning. `kdp inspect usage TITLE_ID`, `kdp inspect provider TITLE_ID`, `kdp inspect budget TITLE_ID`, and `kdp doctor` are read-only.
 
 ## Architectural rule already enforced
 

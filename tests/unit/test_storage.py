@@ -23,7 +23,8 @@ def test_database_creation_and_cleanup(tmp_path: Path):
     engine = engine_for(tmp_path)
     try:
         assert set(inspect(engine).get_table_names()) == {
-            "projects", "titles", "assets", "jobs", "provenance", "approvals", "editorial_findings", "canon_proposals", "audit_events"
+            "projects", "titles", "assets", "jobs", "provenance", "approvals", "editorial_findings", "canon_proposals", "audit_events",
+            "provider_profiles", "project_provider_selections", "model_pricing", "project_budgets", "budget_reservations", "usage_events",
         }
     finally:
         engine.dispose()

@@ -93,9 +93,9 @@ class ChapterService:
         *,
         title_id: str,
         chapter_number: int,
-        provider: ModelProvider,
+        provider: ModelProvider | None = None,
         variables: dict[str, Any] | None = None,
-        max_output_tokens: int = 2400,
+        max_output_tokens: int | None = None,
     ) -> GenerationRunResult:
         if chapter_number < 1:
             raise ValueError("chapter_number must be positive")
@@ -126,8 +126,8 @@ class ChapterService:
             context_manifest=context_manifest,
             provider=provider,
             system_instructions="Draft only the requested chapter using the supplied approved planning context.",
-            max_output_tokens=max_output_tokens,
-            temperature=0,
+            max_output_tokens=max_output_tokens if max_output_tokens is not None else (2400 if provider is not None else None),
+            temperature=0 if provider is not None else None,
             asset_type=ChapterAssetKind.DRAFT.value,
             metadata={"chapter_number": chapter_number, "chapter_card_asset_id": card.asset_id},
         )
@@ -139,9 +139,9 @@ class ChapterService:
         title_id: str,
         chapter_number: int,
         source_asset_id: str,
-        provider: ModelProvider,
+        provider: ModelProvider | None = None,
         finding_ids: list[str] | None = None,
-        max_output_tokens: int = 2400,
+        max_output_tokens: int | None = None,
     ) -> GenerationRunResult:
         with session_scope(root) as session:
             title = session.get(TitleRow, title_id)
@@ -183,8 +183,8 @@ class ChapterService:
             context_manifest=context_manifest,
             provider=provider,
             system_instructions="Revise the source chapter using the supplied findings; preserve unresolved issues as text rather than inventing canon.",
-            max_output_tokens=max_output_tokens,
-            temperature=0,
+            max_output_tokens=max_output_tokens if max_output_tokens is not None else (2400 if provider is not None else None),
+            temperature=0 if provider is not None else None,
             asset_type=ChapterAssetKind.REVISION.value,
             source_ref=source_asset_id,
             metadata={"chapter_number": chapter_number, "source_asset_id": source_asset_id, "finding_ids": finding_ids or []},

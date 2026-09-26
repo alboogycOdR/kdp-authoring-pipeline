@@ -14,7 +14,14 @@ from kdp_pipeline.editorial import EditorialService
 from kdp_pipeline.inspection import doctor as run_doctor, inspect_title
 from kdp_pipeline.models.planning import PlanningArtifactKind
 from kdp_pipeline.planning import PlanningService, accept_planning_artifact
-from kdp_pipeline.providers.fake import FakeProvider
+from kdp_pipeline.providers.settings import ProviderProfileSettings
+from kdp_pipeline.providers.configuration import (
+    add_provider_profile, check_provider_profile, list_provider_profiles,
+    select_provider_for_project, set_provider_enabled, show_provider_profile,
+)
+from kdp_pipeline.providers.costs import (
+    list_model_pricing, project_budget_report, set_model_pricing, set_project_budget,
+)
 from kdp_pipeline.storage.db import init_db
 from kdp_pipeline.storage.db import CanonProposalRow
 from kdp_pipeline.storage.service import (
@@ -29,7 +36,7 @@ from kdp_pipeline.storage.service import (
     transition_title,
 )
 
-app = typer.Typer(help="KDP Pipeline v0.1 — local-first authoring core")
+app = typer.Typer(help="KDP Pipeline — local-first authoring workflow")
 positioning_app = typer.Typer()
 brief_app = typer.Typer()
 outline_app = typer.Typer()
@@ -39,6 +46,9 @@ chapter_app = typer.Typer()
 editorial_app = typer.Typer()
 canon_app = typer.Typer()
 inspect_app = typer.Typer()
+providers_app = typer.Typer(help="Configure and inspect local provider profiles")
+pricing_app = typer.Typer(help="Configure local model pricing")
+budget_app = typer.Typer(help="Configure project generation budgets")
 app.add_typer(positioning_app, name="positioning")
 app.add_typer(brief_app, name="brief")
 app.add_typer(outline_app, name="outline")
@@ -48,6 +58,9 @@ app.add_typer(chapter_app, name="chapter")
 app.add_typer(editorial_app, name="editorial")
 app.add_typer(canon_app, name="canon")
 app.add_typer(inspect_app, name="inspect")
+app.add_typer(providers_app, name="providers")
+app.add_typer(pricing_app, name="pricing")
+app.add_typer(budget_app, name="budget")
 
 
 def _root(root: Path | None) -> Path:
@@ -164,7 +177,7 @@ def _run_planning(root: Path, title_id: str, kind: PlanningArtifactKind, chapter
         title_id=title_id,
         artifact_kind=kind,
         context_manifest=_planning_manifest(title_id, f"planning.{kind.value}"),
-        provider=FakeProvider(),
+        provider=None,
         chapter_number=chapter_number,
     )
     return asyncio.run(service)
@@ -265,12 +278,148 @@ def chapter_advance_drafting(title_id: str, root: Path | None = typer.Option(Non
 
 def _run_chapter(root: Path, title_id: str, chapter_number: int, operation: str, asset_id: str | None = None, finding_ids: list[str] | None = None):
     if operation == "draft":
-        return asyncio.run(ChapterService.draft(root, title_id=title_id, chapter_number=chapter_number, provider=FakeProvider()))
+        return asyncio.run(ChapterService.draft(root, title_id=title_id, chapter_number=chapter_number))
     if operation == "revise":
-        return asyncio.run(ChapterService.revise(root, title_id=title_id, chapter_number=chapter_number, source_asset_id=asset_id or "", provider=FakeProvider(), finding_ids=finding_ids))
+        return asyncio.run(ChapterService.revise(root, title_id=title_id, chapter_number=chapter_number, source_asset_id=asset_id or "", finding_ids=finding_ids))
     if operation == "continuity":
-        return asyncio.run(ContinuityService.analyze(root, title_id=title_id, chapter_number=chapter_number, source_asset_id=asset_id or "", provider=FakeProvider()))
-    return asyncio.run(EditorialService.developmental(root, title_id=title_id, chapter_number=chapter_number, source_asset_id=asset_id or "", provider=FakeProvider()))
+        return asyncio.run(ContinuityService.analyze(root, title_id=title_id, chapter_number=chapter_number, source_asset_id=asset_id or ""))
+    return asyncio.run(EditorialService.developmental(root, title_id=title_id, chapter_number=chapter_number, source_asset_id=asset_id or ""))
+
+
+@providers_app.command("list")
+def providers_list(root: Path | None = typer.Option(None)):
+    typer.echo(json.dumps(list_provider_profiles(_root(root)), indent=2))
+
+
+@providers_app.command("show")
+def providers_show(provider_id: str, root: Path | None = typer.Option(None)):
+    try:
+        typer.echo(json.dumps(show_provider_profile(_root(root), provider_id), indent=2))
+    except ValueError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=2)
+
+
+@providers_app.command("add-openai-compatible")
+def providers_add_openai_compatible(
+    provider_id: str, display_name: str, model: str,
+    base_url: str = typer.Option("https://api.openai.com/v1"),
+    api_key_env: str = typer.Option("OPENAI_API_KEY"),
+    max_output_tokens: int = typer.Option(1200, min=1),
+    temperature: float = typer.Option(0.0, min=0.0, max=2.0),
+    priority: int | None = typer.Option(None),
+    root: Path | None = typer.Option(None),
+):
+    try:
+        profile = ProviderProfileSettings(
+            provider_id=provider_id, provider_type="openai-compatible", display_name=display_name,
+            model=model, base_url=base_url, api_key_env=api_key_env,
+            default_max_output_tokens=max_output_tokens, default_temperature=temperature, priority=priority,
+        )
+        typer.echo(json.dumps(add_provider_profile(_root(root), profile), indent=2))
+    except (OSError, ValueError) as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=2)
+
+
+@providers_app.command("add-fake")
+def providers_add_fake(provider_id: str, display_name: str, model: str = typer.Option("fake-v1"),
+                       root: Path | None = typer.Option(None)):
+    """Register a deterministic fake profile; selecting it is always explicit."""
+    try:
+        settings = ProviderProfileSettings(provider_id=provider_id, provider_type="fake",
+                                           display_name=display_name, model=model)
+        typer.echo(json.dumps(add_provider_profile(_root(root), settings), indent=2))
+    except (OSError, ValueError) as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=2)
+
+
+@providers_app.command("enable")
+def providers_enable(provider_id: str, root: Path | None = typer.Option(None)):
+    try:
+        typer.echo(json.dumps(set_provider_enabled(_root(root), provider_id, True), indent=2))
+    except ValueError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=2)
+
+
+@providers_app.command("disable")
+def providers_disable(provider_id: str, root: Path | None = typer.Option(None)):
+    try:
+        typer.echo(json.dumps(set_provider_enabled(_root(root), provider_id, False), indent=2))
+    except ValueError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=2)
+
+
+@providers_app.command("select")
+def providers_select(provider_id: str, project_id: str = typer.Option(...), root: Path | None = typer.Option(None)):
+    try:
+        typer.echo(json.dumps(select_provider_for_project(_root(root), project_id, provider_id)))
+    except ValueError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=2)
+
+
+@providers_app.command("check")
+def providers_check(provider_id: str, connect: bool = typer.Option(False, "--connect"), root: Path | None = typer.Option(None)):
+    try:
+        result = check_provider_profile(_root(root), provider_id, connect=connect)
+        typer.echo(result.model_dump_json(indent=2))
+        if not result.ready:
+            raise typer.Exit(code=1)
+    except ValueError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=2)
+
+
+@pricing_app.command("list")
+def pricing_list(provider_id: str | None = typer.Option(None), root: Path | None = typer.Option(None)):
+    typer.echo(json.dumps(list_model_pricing(_root(root), provider_id), indent=2))
+
+
+@pricing_app.command("set")
+def pricing_set(
+    provider_id: str, model: str,
+    input_usd_per_million: float = typer.Option(..., min=0),
+    output_usd_per_million: float = typer.Option(..., min=0),
+    cached_input_usd_per_million: float | None = typer.Option(None, min=0),
+    currency: str = typer.Option("USD"), root: Path | None = typer.Option(None),
+):
+    try:
+        result = set_model_pricing(_root(root), provider_id, model,
+                                   input_usd_per_million=input_usd_per_million,
+                                   output_usd_per_million=output_usd_per_million,
+                                   cached_input_usd_per_million=cached_input_usd_per_million,
+                                   currency=currency)
+        typer.echo(json.dumps(result, indent=2))
+    except ValueError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=2)
+
+
+@budget_app.command("set")
+def budget_set(
+    project_id: str, monthly_usd: float | None = typer.Option(None, min=0.000001),
+    max_run_usd: float | None = typer.Option(None, min=0.000001),
+    warning_percent: int = typer.Option(80, min=1, max=100),
+    hard_stop: bool = typer.Option(True, "--hard-stop/--soft"),
+    root: Path | None = typer.Option(None),
+):
+    try:
+        result = set_project_budget(_root(root), project_id, monthly_limit_usd=monthly_usd,
+                                    max_run_estimated_cost_usd=max_run_usd,
+                                    warning_percent=warning_percent, hard_stop=hard_stop)
+        typer.echo(json.dumps(result, indent=2))
+    except ValueError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=2)
+
+
+@budget_app.command("show")
+def budget_show(project_id: str, root: Path | None = typer.Option(None)):
+    typer.echo(json.dumps(project_budget_report(_root(root), project_id), indent=2))
 
 
 @chapter_app.command("draft")
@@ -384,6 +533,33 @@ def inspect_jobs(title_id: str, root: Path | None = typer.Option(None)):
 def inspect_provenance(title_id: str, root: Path | None = typer.Option(None)):
     try:
         _print_inspection(title_id, _root(root), "provenance")
+    except (OSError, ValueError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
+
+
+@inspect_app.command("usage")
+def inspect_usage(title_id: str, root: Path | None = typer.Option(None)):
+    try:
+        _print_inspection(title_id, _root(root), "usage")
+    except (OSError, ValueError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
+
+
+@inspect_app.command("provider")
+def inspect_provider(title_id: str, root: Path | None = typer.Option(None)):
+    try:
+        _print_inspection(title_id, _root(root), "provider")
+    except (OSError, ValueError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
+
+
+@inspect_app.command("budget")
+def inspect_budget(title_id: str, root: Path | None = typer.Option(None)):
+    try:
+        _print_inspection(title_id, _root(root), "budget")
     except (OSError, ValueError) as e:
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(code=2)

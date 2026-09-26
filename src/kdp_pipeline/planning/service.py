@@ -20,11 +20,11 @@ class PlanningService:
         title_id: str,
         artifact_kind: PlanningArtifactKind,
         context_manifest: ContextManifest,
-        provider: ModelProvider,
+        provider: ModelProvider | None = None,
         variables: dict[str, Any] | None = None,
         chapter_number: int | None = None,
         system_instructions: str = "Create a planning proposal using only the supplied context.",
-        max_output_tokens: int = 1200,
+        max_output_tokens: int | None = None,
     ) -> GenerationRunResult:
         if context_manifest.title_id != title_id:
             raise ValueError("Context manifest title_id must match the planning title_id")
@@ -62,8 +62,8 @@ class PlanningService:
             context_manifest=context_manifest,
             provider=provider,
             system_instructions=system_instructions,
-            max_output_tokens=max_output_tokens,
-            temperature=0,
+            max_output_tokens=max_output_tokens if max_output_tokens is not None else (1200 if provider is not None else None),
+            temperature=0 if provider is not None else None,
             asset_type=spec.asset_type,
             metadata={"planning_artifact_kind": artifact_kind.value, "chapter_number": chapter_number},
         )

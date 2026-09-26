@@ -30,7 +30,7 @@ class EditorialService:
         title_id: str,
         chapter_number: int,
         source_asset_id: str,
-        provider: ModelProvider,
+        provider: ModelProvider | None = None,
     ) -> EditorialRunResult:
         with session_scope(root) as session:
             title = session.get(TitleRow, title_id)
@@ -48,7 +48,8 @@ class EditorialService:
             root, title_id=title_id, task_type=f"chapter.editorial.developmental.{chapter_number}",
             rendered_prompt=prompt, context_manifest=manifest, provider=provider,
             system_instructions="Identify developmental issues as findings; do not rewrite the chapter.",
-            max_output_tokens=1200, temperature=0, asset_type="analysis.editorial.developmental",
+            max_output_tokens=1200 if provider is not None else None,
+            temperature=0 if provider is not None else None, asset_type="analysis.editorial.developmental",
             source_ref=source_asset_id, metadata={"chapter_number": chapter_number, "source_asset_id": source_asset_id, "pass_type": "developmental"},
         )
         with session_scope(root) as session:

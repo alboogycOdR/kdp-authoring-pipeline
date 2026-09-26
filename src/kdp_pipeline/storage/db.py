@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, create_engine
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, create_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 from sqlalchemy.pool import NullPool
 
@@ -159,6 +159,85 @@ class AuditEventRow(Base):
     correlation_id: Mapped[str] = mapped_column(String, nullable=False)
     result: Mapped[str] = mapped_column(String, nullable=False)
     metadata_json: Mapped[str] = mapped_column(Text, default="{}")
+
+
+class ProviderProfileRow(Base):
+    __tablename__ = "provider_profiles"
+    provider_id: Mapped[str] = mapped_column(String, primary_key=True)
+    provider_type: Mapped[str] = mapped_column(String, nullable=False)
+    display_name: Mapped[str] = mapped_column(String, nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    base_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    model: Mapped[str] = mapped_column(String, nullable=False)
+    api_key_env: Mapped[str | None] = mapped_column(String, nullable=True)
+    default_max_output_tokens: Mapped[int] = mapped_column(Integer, default=1200, nullable=False)
+    default_temperature: Mapped[float | None] = mapped_column(Float, nullable=True)
+    priority: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    metadata_json: Mapped[str] = mapped_column(Text, default="{}", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class ProjectProviderSelectionRow(Base):
+    __tablename__ = "project_provider_selections"
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.project_id"), primary_key=True)
+    provider_id: Mapped[str | None] = mapped_column(ForeignKey("provider_profiles.provider_id"), nullable=True)
+    selected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class ModelPricingRow(Base):
+    __tablename__ = "model_pricing"
+    provider_id: Mapped[str] = mapped_column(ForeignKey("provider_profiles.provider_id"), primary_key=True)
+    model: Mapped[str] = mapped_column(String, primary_key=True)
+    input_usd_per_million: Mapped[float] = mapped_column(Float, nullable=False)
+    output_usd_per_million: Mapped[float] = mapped_column(Float, nullable=False)
+    cached_input_usd_per_million: Mapped[float | None] = mapped_column(Float, nullable=True)
+    currency: Mapped[str] = mapped_column(String(3), default="USD", nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class ProjectBudgetRow(Base):
+    __tablename__ = "project_budgets"
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.project_id"), primary_key=True)
+    monthly_limit_usd: Mapped[float | None] = mapped_column(Float, nullable=True)
+    max_run_estimated_cost_usd: Mapped[float | None] = mapped_column(Float, nullable=True)
+    warning_percent: Mapped[int] = mapped_column(Integer, default=80, nullable=False)
+    hard_stop: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class BudgetReservationRow(Base):
+    __tablename__ = "budget_reservations"
+    reservation_id: Mapped[str] = mapped_column(String, primary_key=True)
+    job_id: Mapped[str] = mapped_column(ForeignKey("jobs.job_id"), unique=True, nullable=False)
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.project_id"), nullable=False)
+    month: Mapped[str] = mapped_column(String(7), nullable=False)
+    estimated_cost_usd: Mapped[float | None] = mapped_column(Float, nullable=True)
+    status: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    settled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class UsageEventRow(Base):
+    __tablename__ = "usage_events"
+    usage_event_id: Mapped[str] = mapped_column(String, primary_key=True)
+    title_id: Mapped[str] = mapped_column(ForeignKey("titles.title_id"), nullable=False)
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.project_id"), nullable=False)
+    job_id: Mapped[str] = mapped_column(ForeignKey("jobs.job_id"), unique=True, nullable=False)
+    asset_id: Mapped[str | None] = mapped_column(ForeignKey("assets.asset_id"), nullable=True)
+    provider_id: Mapped[str | None] = mapped_column(ForeignKey("provider_profiles.provider_id"), nullable=True)
+    provider: Mapped[str] = mapped_column(String, nullable=False)
+    model: Mapped[str] = mapped_column(String, nullable=False)
+    input_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    output_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    total_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    cached_input_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    estimated_cost: Mapped[float | None] = mapped_column(Float, nullable=True)
+    currency: Mapped[str | None] = mapped_column(String(3), nullable=True)
+    source: Mapped[str] = mapped_column(String, nullable=False)
+    cost_details_json: Mapped[str] = mapped_column(Text, default="{}", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 def utcnow() -> datetime:

@@ -33,7 +33,7 @@ class ContinuityService:
         title_id: str,
         chapter_number: int,
         source_asset_id: str,
-        provider: ModelProvider,
+        provider: ModelProvider | None = None,
     ) -> ContinuityRunResult:
         with session_scope(root) as session:
             title = session.get(TitleRow, title_id)
@@ -55,7 +55,8 @@ class ContinuityService:
             root, title_id=title_id, task_type=f"chapter.continuity.{chapter_number}",
             rendered_prompt=prompt, context_manifest=manifest, provider=provider,
             system_instructions="Identify continuity conflicts and separate observed evidence from proposed canon changes.",
-            max_output_tokens=1200, temperature=0, asset_type="analysis.continuity",
+            max_output_tokens=1200 if provider is not None else None,
+            temperature=0 if provider is not None else None, asset_type="analysis.continuity",
             source_ref=source_asset_id, metadata={"chapter_number": chapter_number, "source_asset_id": source_asset_id},
         )
         with session_scope(root) as session:

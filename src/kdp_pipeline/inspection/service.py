@@ -141,14 +141,20 @@ def inspect_title(root: Path, title_id: str) -> dict:
             "chapter_lifecycle": {"drafting_state": title.status == "DRAFTING", "experimental_chapter_assets": [asset.asset_id for asset in experimental_chapters],
                                   "accepted_chapter_assets": [asset.asset_id for asset in accepted_chapters], "accepted_chapter_count": len(accepted_chapters)},
             "assets": [{"asset_id": asset.asset_id, "asset_type": asset.asset_type, "path": asset.path, "sha256": asset.sha256, "approval_status": asset.approval_status, "source_ref": asset.source_ref} for asset in assets],
-            "jobs": [{"job_id": job.job_id, "job_type": job.job_type, "status": job.status, "error": job.error, "idempotency_key": job.idempotency_key} for job in jobs],
+            "jobs": [{"job_id": job.job_id, "job_type": job.job_type, "status": job.status,
+                      "error": job.error, "idempotency_key": job.idempotency_key,
+                      "usage_event_id": next((event.usage_event_id for event in usage_rows if event.job_id == job.job_id), None),
+                      "usage_diagnostics": next((json.loads(event.cost_details_json or "{}").get("response_diagnostics")
+                                                  for event in usage_rows if event.job_id == job.job_id
+                                                  and json.loads(event.cost_details_json or "{}").get("response_diagnostics")), None)}
+                     for job in jobs],
             "provenance": [{"provenance_id": row.provenance_id, "asset_id": row.asset_id, "job_id": row.job_id, "provider": row.provider, "model": row.model, "output_hash": row.output_hash} for row in provenance],
             "provider": ({"provider_id": provider.provider_id, "provider_type": provider.provider_type,
                           "display_name": provider.display_name, "enabled": provider.enabled,
                           "model": provider.model, "api_key_env": provider.api_key_env,
                           "api_key_configured": bool(os.getenv(provider.api_key_env)) if provider.api_key_env else False}
                          if provider else {"provider_id": None, "selected": False}),
-            "usage": {"recent_events": [{"usage_event_id": row.usage_event_id, "provider": row.provider,
+            "usage": {"recent_events": [{"usage_event_id": row.usage_event_id, "job_id": row.job_id, "provider": row.provider,
                         "model": row.model, "input_tokens": row.input_tokens, "output_tokens": row.output_tokens,
                         "total_tokens": row.total_tokens, "estimated_cost": row.estimated_cost,
                         "currency": row.currency, "source": row.source,

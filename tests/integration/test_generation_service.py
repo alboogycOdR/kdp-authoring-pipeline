@@ -8,9 +8,15 @@ from sqlalchemy import func, select
 from kdp_pipeline.context import ContextInput, ContextManifest
 from kdp_pipeline.core.hashing import sha256_text
 from kdp_pipeline.generation import GenerationService
+from kdp_pipeline.generation.service import GenerationServiceError
+from kdp_pipeline.inspection.service import inspect_title
 from kdp_pipeline.providers import FakeProvider, GenerationRequest, GenerationResult, RenderedPrompt
-from kdp_pipeline.storage.db import AssetRow, JobRow, ProvenanceRow
+from kdp_pipeline.storage.db import (
+    AssetRow, AuditEventRow, BudgetReservationRow, JobRow, ProvenanceRow, UsageEventRow,
+)
 from kdp_pipeline.storage.service import create_project, create_title, list_audit, session_scope
+from kdp_pipeline.providers import UsageMetadata
+from kdp_pipeline.providers.costs import set_project_budget
 
 
 def make_prompt(text: str = "Generate a deterministic output.") -> RenderedPrompt:
@@ -155,3 +161,70 @@ def test_provider_failure_marks_job_failed_without_asset_or_provenance(tmp_path:
         assert session.scalar(select(func.count(ProvenanceRow.provenance_id))) == 0
     assert not list((tmp_path / "projects" / next(iter([p.name for p in (tmp_path / "projects").iterdir()])) / "titles" / title.title_id / "05_drafts" / "experimental").glob("*.md"))
     assert "generation.failed" in [event.action for event in list_audit(tmp_path, job.job_id)]
+
+
+@pytest.mark.parametrize("output", ["", " \t\r\n "])
+def test_empty_provider_output_fails_without_asset_and_preserves_usage(tmp_path: Path, output: str):
+    project, title = setup_title(tmp_path)
+    set_project_budget(tmp_path, project.project_id, monthly_limit_usd=10,
+                       max_run_estimated_cost_usd=None, warning_percent=80, hard_stop=False)
+    secret = "never-persist-this-secret-value"
+
+    class EmptyProvider:
+        provider_name = "fake-empty"
+        model_name = "test-model"
+
+        async def generate(self, request):
+            return GenerationResult(
+                provider=self.provider_name,
+                model=self.model_name,
+                text=output,
+                usage=UsageMetadata(input_tokens=5, output_tokens=1200, total_tokens=1205),
+                metadata={"response_diagnostics": {
+                    "finish_reason": "length",
+                    "refusal_present": False,
+                    "reasoning_tokens": 1200,
+                    "output_token_details": {"reasoning_tokens": 1200, "unsafe": secret},
+                    "content_empty": True,
+                    "provider_status": "incomplete",
+                    "incomplete_reason": "max_output_tokens",
+                    "raw_body": secret,
+                }},
+            )
+
+    with pytest.raises(GenerationServiceError, match="provider output was empty"):
+        run_generation(tmp_path, title.title_id, EmptyProvider())
+
+    with session_scope(tmp_path) as session:
+        job = session.scalar(select(JobRow).where(JobRow.title_id == title.title_id))
+        assert job.status == "failed"
+        assert job.error == "Generation rejected: provider output was empty or whitespace-only"
+        assert session.scalar(select(func.count(AssetRow.asset_id))) == 0
+        assert session.scalar(select(func.count(ProvenanceRow.provenance_id))) == 0
+        usage = session.scalar(select(UsageEventRow).where(UsageEventRow.job_id == job.job_id))
+        assert usage is not None
+        assert (usage.input_tokens, usage.output_tokens, usage.total_tokens) == (5, 1200, 1205)
+        assert usage.source == "unknown"
+        reservation = session.scalar(select(BudgetReservationRow).where(
+            BudgetReservationRow.project_id == project.project_id
+        ))
+        assert reservation.status == "unpriced"
+        diagnostics = json.loads(usage.cost_details_json)["response_diagnostics"]
+        assert diagnostics == {
+            "finish_reason": "length", "refusal_present": False,
+            "reasoning_tokens": 1200, "output_token_details": {"reasoning_tokens": 1200},
+            "content_empty": True, "provider_status": "incomplete",
+            "incomplete_reason": "max_output_tokens",
+        }
+        audit = list(session.scalars(select(AuditEventRow).where(AuditEventRow.entity_id == job.job_id)))
+        audit_dump = " ".join(event.metadata_json for event in audit)
+        assert "generation.empty_output_rejected" in [event.action for event in audit]
+        assert secret not in audit_dump
+
+    report = inspect_title(tmp_path, title.title_id)
+    job_report = next(item for item in report["jobs"] if item["job_id"] == job.job_id)
+    assert job_report["status"] == "failed"
+    assert "empty or whitespace-only" in job_report["error"]
+    assert job_report["usage_event_id"] == usage.usage_event_id
+    assert job_report["usage_diagnostics"]["reasoning_tokens"] == 1200
+    assert secret not in json.dumps(report)

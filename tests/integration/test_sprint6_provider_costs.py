@@ -42,6 +42,20 @@ def test_provider_profiles_selection_toggle_and_no_implicit_fallback(tmp_path):
         resolve_project_provider(tmp_path, project.project_id)
 
 
+def test_openai_gpt5_profile_does_not_supply_unsupported_temperature(tmp_path, monkeypatch):
+    monkeypatch.setenv("PILOT_OPENAI_KEY", "not-a-real-key")
+    project = create_project(tmp_path, "GPT-5 config project")
+    add_provider_profile(tmp_path, ProviderProfileSettings(
+        provider_id="gpt5", provider_type="openai-compatible", display_name="GPT-5",
+        model="gpt-5", base_url="https://api.openai.com/v1", api_key_env="PILOT_OPENAI_KEY",
+        default_temperature=0,
+    ))
+    select_provider_for_project(tmp_path, project.project_id, "gpt5")
+    provider = resolve_project_provider(tmp_path, project.project_id)
+    assert provider.default_temperature is None
+    assert provider.uses_openai_reasoning_defaults is True
+
+
 def test_generation_without_project_selection_fails_without_fake_fallback(tmp_path):
     project = create_project(tmp_path, "No-selection project")
     title = create_title(tmp_path, project.project_id, "No-selection title")

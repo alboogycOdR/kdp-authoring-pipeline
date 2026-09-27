@@ -111,6 +111,63 @@ def test_successful_request_and_response_mapping(monkeypatch):
     assert result.latency_ms >= 0
 
 
+def test_openai_gpt5_uses_reasoning_compatible_chat_parameters(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-secret")
+    seen = {}
+
+    async def handler(request: httpx.Request):
+        seen["payload"] = json.loads(request.content)
+        return httpx.Response(200, json={"choices": [{"message": {"content": "positioning"}}]})
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    provider = OpenAICompatibleProvider(
+        OpenAICompatibleConfig(model="gpt-5", base_url="https://api.openai.com/v1"),
+        client=client,
+    )
+    try:
+        result = run(provider.generate(make_request()))
+    finally:
+        run(client.aclose())
+
+    payload = seen["payload"]
+    assert payload["max_completion_tokens"] == 64
+    assert "max_tokens" not in payload
+    assert "temperature" not in payload
+    assert result.text == "positioning"
+
+
+def test_response_diagnostics_capture_safe_finish_refusal_and_token_details(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-secret")
+
+    async def handler(request: httpx.Request):
+        return httpx.Response(200, json={
+            "id": "chatcmpl-diagnostics", "status": "incomplete",
+            "incomplete_details": {"reason": "max_output_tokens"},
+            "choices": [{"finish_reason": "length", "message": {
+                "content": "   ", "refusal": "private refusal details must not be retained",
+            }}],
+            "usage": {"prompt_tokens": 3, "completion_tokens": 64, "total_tokens": 67,
+                      "completion_tokens_details": {"reasoning_tokens": 60,
+                          "accepted_prediction_tokens": 2}},
+        })
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    provider = OpenAICompatibleProvider(OpenAICompatibleConfig(model="test-model"), client=client)
+    try:
+        result = run(provider.generate(make_request()))
+    finally:
+        run(client.aclose())
+
+    assert result.text == "   "
+    assert result.metadata["response_diagnostics"] == {
+        "finish_reason": "length", "refusal_present": True, "reasoning_tokens": 60,
+        "output_token_details": {"reasoning_tokens": 60, "accepted_prediction_tokens": 2},
+        "content_empty": True, "provider_status": "incomplete",
+        "incomplete_reason": "max_output_tokens",
+    }
+    assert "private refusal details" not in json.dumps(result.metadata)
+
+
 def test_inline_structured_schema_maps_and_parses(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "test-secret")
     schema = {"type": "object", "properties": {"ok": {"type": "boolean"}}}
@@ -186,6 +243,7 @@ def test_errors_do_not_leak_key_prompt_or_large_response(monkeypatch):
                 "error": {
                     "type": "server_error",
                     "code": "internal",
+                    "param": "max_tokens",
                     "message": f"{secret} Rendered prompt and sensitive body " + "x" * 10000,
                 }
             },
@@ -201,7 +259,26 @@ def test_errors_do_not_leak_key_prompt_or_large_response(monkeypatch):
     message = str(caught.value)
     assert secret not in message
     assert "Rendered prompt" not in message
+    assert "parameter=max_tokens" in message
     assert len(message) < 300
+
+
+def test_provider_error_parameter_is_sanitized_against_secret(monkeypatch):
+    secret = "sk-secret-value"
+    monkeypatch.setenv("OPENAI_API_KEY", secret)
+
+    async def handler(request: httpx.Request):
+        return httpx.Response(400, json={"error": {"param": secret}})
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    provider = OpenAICompatibleProvider(OpenAICompatibleConfig(model="test-model"), client=client)
+    try:
+        with pytest.raises(ProviderHTTPError) as caught:
+            run(provider.generate(make_request()))
+    finally:
+        run(client.aclose())
+    assert secret not in str(caught.value)
+    assert caught.value.parameter is None
 
 
 def test_transport_and_malformed_response_errors(monkeypatch):

@@ -199,6 +199,53 @@ def _redact_environment_secrets(message: str) -> str:
     return message
 
 
+def _safe_response_diagnostics(result: GenerationResult) -> dict[str, Any]:
+    """Select only adapter diagnostics safe for persistence and operator inspection."""
+    value = result.metadata.get("response_diagnostics") if isinstance(result.metadata, dict) else None
+    if not isinstance(value, dict):
+        return {}
+    allowed = {"finish_reason", "refusal_present", "reasoning_tokens", "output_token_details",
+               "content_empty", "provider_status", "incomplete_reason"}
+    diagnostics: dict[str, Any] = {}
+    for key in allowed:
+        item = value.get(key)
+        if key in {"refusal_present", "content_empty"} and isinstance(item, bool):
+            diagnostics[key] = item
+        elif key == "reasoning_tokens" and isinstance(item, int) and item >= 0:
+            diagnostics[key] = item
+        elif key == "output_token_details" and isinstance(item, dict):
+            diagnostics[key] = {name: count for name, count in item.items()
+                                if name in {"reasoning_tokens", "accepted_prediction_tokens",
+                                            "rejected_prediction_tokens", "audio_tokens"}
+                                and isinstance(count, int) and count >= 0}
+        elif key in {"finish_reason", "provider_status", "incomplete_reason"} and isinstance(item, str):
+            if re.fullmatch(r"[A-Za-z0-9_.:-]{1,80}", item):
+                diagnostics[key] = item
+    return diagnostics
+
+
+def _reject_empty_output(root: Path, job_id: str, diagnostics: dict[str, Any]) -> None:
+    summary = "Generation rejected: provider output was empty or whitespace-only"
+    with session_scope(root) as session:
+        job = session.get(JobRow, job_id)
+        if job is None:
+            return
+        job.status = "failed"
+        job.error = summary
+        job.completed_at = utcnow()
+        AuditEventWriter.append(
+            session, actor_id="system", action="generation.empty_output_rejected",
+            entity_type="job", entity_id=job_id, correlation_id=job_id,
+            result="failed", metadata={"error": summary, "response_diagnostics": diagnostics},
+        )
+        AuditEventWriter.append(
+            session, actor_id="system", action="generation.failed",
+            entity_type="job", entity_id=job_id, correlation_id=job_id,
+            result="failed", metadata={"error": summary, "reason": "empty_output"},
+        )
+        session.commit()
+
+
 class GenerationService:
     @staticmethod
     async def generate(
@@ -376,6 +423,10 @@ class GenerationService:
             title = session.get(TitleRow, title_id)
             pricing = session.get(ModelPricingRow, (provider_profile_id, model_name)) if provider_profile_id else None
             cost_data = calculate_usage_cost(generation_result.usage, pricing)
+            response_diagnostics = _safe_response_diagnostics(generation_result)
+            cost_details = {**cost_data["cost_details"], **(
+                {"response_diagnostics": response_diagnostics} if response_diagnostics else {}
+            )}
             usage_event = UsageEventRow(
                 usage_event_id=new_id("USE"), title_id=title_id, project_id=title.project_id,
                 job_id=job.job_id, asset_id=None, provider_id=provider_profile_id,
@@ -384,7 +435,7 @@ class GenerationService:
                 total_tokens=cost_data["total_tokens"], cached_input_tokens=cost_data["cached_input_tokens"],
                 estimated_cost=cost_data["estimated_cost"], currency=cost_data["currency"],
                 source=cost_data["source"],
-                cost_details_json=json.dumps(cost_data["cost_details"], sort_keys=True), created_at=utcnow(),
+                cost_details_json=json.dumps(cost_details, sort_keys=True), created_at=utcnow(),
             )
             session.add(usage_event)
             budget_cost = cost_data["estimated_cost"] if cost_data["currency"] in (None, "USD") else None
@@ -397,9 +448,13 @@ class GenerationService:
                           "model": generation_result.model, "input_tokens": cost_data["input_tokens"],
                           "output_tokens": cost_data["output_tokens"], "total_tokens": cost_data["total_tokens"],
                           "estimated_cost": cost_data["estimated_cost"], "currency": cost_data["currency"],
-                          "source": cost_data["source"], "cost_details": cost_data["cost_details"]},
+                          "source": cost_data["source"], "cost_details": cost_details},
             )
             session.commit()
+
+        if not generation_result.text.strip():
+            _reject_empty_output(root, job.job_id, response_diagnostics)
+            raise GenerationServiceError("Generation rejected: provider output was empty or whitespace-only")
 
         output_path: Path | None = None
         try:

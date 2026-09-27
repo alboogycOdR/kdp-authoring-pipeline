@@ -202,7 +202,10 @@ def resolve_project_provider(root: Path, project_id: str):
         "default_temperature": config.default_temperature,
     }))
     provider.default_max_output_tokens = config.default_max_output_tokens
-    provider.default_temperature = config.default_temperature
+    provider.default_temperature = (
+        None if getattr(provider, "uses_openai_reasoning_defaults", False)
+        else config.default_temperature
+    )
     return provider
 
 

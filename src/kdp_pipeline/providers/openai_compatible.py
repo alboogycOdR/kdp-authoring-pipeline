@@ -26,15 +26,19 @@ class ProviderTransportError(OpenAICompatibleProviderError):
 
 
 class ProviderHTTPError(OpenAICompatibleProviderError):
-    def __init__(self, status_code: int, error_type: str | None = None, error_code: str | None = None):
+    def __init__(self, status_code: int, error_type: str | None = None,
+                 error_code: str | None = None, parameter: str | None = None):
         self.status_code = status_code
         self.error_type = error_type
         self.error_code = error_code
+        self.parameter = parameter
         details = [f"HTTP {status_code}"]
         if error_type:
             details.append(f"type={error_type}")
         if error_code:
             details.append(f"code={error_code}")
+        if parameter:
+            details.append(f"parameter={parameter}")
         super().__init__("OpenAI-compatible provider error (" + ", ".join(details) + ")")
 
 
@@ -83,6 +87,13 @@ def _safe_error_identity(value: object, secret: str | None = None) -> str | None
     return value
 
 
+def _safe_diagnostic_string(value: object) -> str | None:
+    """Keep response diagnostics short and identifier-like; never retain raw text."""
+    if isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9_.:-]{1,80}", value):
+        return value
+    return None
+
+
 class OpenAICompatibleProvider:
     def __init__(self, config: OpenAICompatibleConfig, client: httpx.AsyncClient | None = None):
         self.config = config
@@ -96,16 +107,27 @@ class OpenAICompatibleProvider:
     def model_name(self) -> str:
         return self.config.model
 
+    @property
+    def uses_openai_reasoning_defaults(self) -> bool:
+        """GPT-5/o-series Chat Completions have different parameter constraints."""
+        hostname = (urlparse(self.config.base_url).hostname or "").lower()
+        model = self.model_name.lower()
+        reasoning_model = bool(re.match(r"^(?:gpt-5(?:[.-]|$)|o[134](?:[.-]|$))", model))
+        return hostname == "api.openai.com" and reasoning_model
+
     def _payload(self, request: GenerationRequest) -> dict:
+        token_limit_field = (
+            "max_completion_tokens" if self.uses_openai_reasoning_defaults else "max_tokens"
+        )
         payload = {
             "model": self.model_name,
             "messages": [
                 {"role": "system", "content": request.system_instructions},
                 {"role": "user", "content": request.rendered_prompt.rendered_text},
             ],
-            "max_tokens": request.max_output_tokens,
+            token_limit_field: request.max_output_tokens,
         }
-        if request.temperature is not None:
+        if request.temperature is not None and not self.uses_openai_reasoning_defaults:
             payload["temperature"] = request.temperature
         if request.structured_output_schema is not None:
             payload["response_format"] = {
@@ -159,15 +181,17 @@ class OpenAICompatibleProvider:
             if response.status_code >= 400:
                 error_type = None
                 error_code = None
+                parameter = None
                 try:
                     error_body = response.json()
                     error = error_body.get("error", {}) if isinstance(error_body, dict) else {}
                     if isinstance(error, dict):
                         error_type = _safe_error_identity(error.get("type"), api_key)
                         error_code = _safe_error_identity(error.get("code"), api_key)
+                        parameter = _safe_error_identity(error.get("param"), api_key)
                 except (ValueError, json.JSONDecodeError):
                     pass
-                raise ProviderHTTPError(response.status_code, error_type, error_code)
+                raise ProviderHTTPError(response.status_code, error_type, error_code, parameter)
 
             try:
                 body = response.json()
@@ -193,6 +217,30 @@ class OpenAICompatibleProvider:
                     ) from exc
 
             usage = body.get("usage")
+            completion_details = usage.get("completion_tokens_details") if isinstance(usage, dict) else None
+            output_token_details = None
+            if isinstance(completion_details, dict):
+                output_token_details = {
+                    key: value for key in (
+                        "reasoning_tokens", "accepted_prediction_tokens",
+                        "rejected_prediction_tokens", "audio_tokens",
+                    )
+                    if isinstance((value := completion_details.get(key)), int) and value >= 0
+                }
+            refusal = message.get("refusal")
+            diagnostics = {
+                "finish_reason": _safe_diagnostic_string(choice.get("finish_reason")),
+                "refusal_present": bool(refusal.strip()) if isinstance(refusal, str) else bool(refusal),
+                "reasoning_tokens": output_token_details.get("reasoning_tokens") if output_token_details else None,
+                "output_token_details": output_token_details or None,
+                "content_empty": not text.strip(),
+                "provider_status": _safe_diagnostic_string(body.get("status")),
+                "incomplete_reason": _safe_diagnostic_string(
+                    (body.get("incomplete_details") or {}).get("reason")
+                    if isinstance(body.get("incomplete_details"), dict) else None
+                ),
+            }
+            diagnostics = {key: value for key, value in diagnostics.items() if value is not None}
             usage_metadata = UsageMetadata(
                 input_tokens=usage.get("prompt_tokens") if isinstance(usage, dict) else None,
                 output_tokens=usage.get("completion_tokens") if isinstance(usage, dict) else None,
@@ -214,6 +262,7 @@ class OpenAICompatibleProvider:
                 usage=usage_metadata,
                 latency_ms=(time.perf_counter() - started) * 1000,
                 provider_response_ref=response_id if isinstance(response_id, str) else None,
+                metadata={"response_diagnostics": diagnostics},
             )
         finally:
             if owned_client:

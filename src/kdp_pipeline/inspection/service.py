@@ -14,7 +14,7 @@ from sqlalchemy.pool import NullPool
 from kdp_pipeline.models.planning import PlanningArtifactKind, spec_for
 from kdp_pipeline.continuity.service import ContinuityOutputInvalid, _validate_output
 from kdp_pipeline.storage.db import (
-    AssetRow, ApprovalRow, AuditEventRow, CanonProposalRow, EditorialFindingRow,
+    AssetRow, ApprovalRow, AuditEventRow, CanonProposalRow, ConceptGateRow, EditorialFindingRow,
     JobRow, ProjectRow, ProvenanceRow, TitleRow,
     ProviderProfileRow, ProjectProviderSelectionRow, ProjectBudgetRow,
     UsageEventRow, BudgetReservationRow, ModelPricingRow,
@@ -64,6 +64,7 @@ def _file_check(asset: AssetRow) -> dict:
 
 def inspect_title(root: Path, title_id: str) -> dict:
     with _read_only_session(root) as session:
+        existing_tables = set(sqlalchemy_inspect(session.bind).get_table_names())
         title = session.get(TitleRow, title_id)
         if title is None:
             raise ValueError(f"Unknown title: {title_id}")
@@ -148,6 +149,38 @@ def inspect_title(root: Path, title_id: str) -> dict:
                               "provenance_id": prov.provenance_id if prov else None})
             planning[kind.value] = {"required": True, "accepted": valid, "complete": bool(valid)}
 
+        concept_assets = [asset for asset in assets if asset.asset_type.startswith("concept.")]
+        accepted_concept_brief = next((asset for asset in concept_assets
+            if asset.asset_type == "concept.brief" and asset.approval_status == "accepted"
+            and any(a.asset_id == asset.asset_id and a.decision == "accepted" for a in approvals)), None)
+        concept_warnings = []
+        concept_flags = []
+        concept_scorecards = []
+        for asset in concept_assets:
+            if asset.asset_type in {"concept.validation", "concept.scorecard"} and Path(asset.path).is_file():
+                try:
+                    parsed = json.loads(Path(asset.path).read_text(encoding="utf-8"))
+                    if asset.asset_type == "concept.validation":
+                        concept_warnings.extend(parsed.get("warnings", []))
+                        concept_flags.extend(parsed.get("research_flags", []))
+                        concept_flags.extend(parsed.get("content_transparency_flags", []))
+                    else:
+                        concept_scorecards.append({"asset_id": asset.asset_id, "approval_status": asset.approval_status,
+                                                   "scorecard": parsed})
+                except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+                    concept_warnings.append(f"Concept {asset.asset_type} asset {asset.asset_id} is unreadable or not structured JSON.")
+        concept_gate = session.get(ConceptGateRow, title_id) if "concept_gates" in existing_tables else None
+        concept_enabled = bool(concept_gate and concept_gate.enabled)
+        concepts = {"enabled": concept_enabled,
+                    "positioning_unlocked": (not concept_enabled or accepted_concept_brief is not None),
+                    "accepted_concept_brief_asset_id": accepted_concept_brief.asset_id if accepted_concept_brief else None,
+                    "artefacts": [{"asset_id": a.asset_id, "asset_type": a.asset_type,
+                                   "approval_status": a.approval_status, "path": a.path, "source_ref": a.source_ref}
+                                  for a in concept_assets],
+                    "validation_warnings": sorted(set(concept_warnings)),
+                    "scorecards": concept_scorecards,
+                    "outstanding_research_content_flags": sorted(set(map(str, concept_flags)))}
+
         accepted_chapters = [asset for asset in assets if asset.asset_type == "chapter.accepted" and asset.approval_status == "accepted"]
         experimental_chapters = [asset for asset in assets if asset.asset_type in {"chapter.draft", "chapter.revision"} and asset.approval_status == "experimental"]
         inconsistencies = [check for asset in assets if not (check := _file_check(asset))["hash_matches"]]
@@ -190,6 +223,7 @@ def inspect_title(root: Path, title_id: str) -> dict:
             "project": project_data,
             "title": {"title_id": title.title_id, "working_title": title.working_title, "status": title.status},
             "planning": planning,
+            "concept": concepts,
             "chapter_lifecycle": {"drafting_state": title.status == "DRAFTING", "experimental_chapter_assets": [asset.asset_id for asset in experimental_chapters],
                                   "accepted_chapter_assets": [asset.asset_id for asset in accepted_chapters], "accepted_chapter_count": len(accepted_chapters)},
             "assets": [{"asset_id": asset.asset_id, "asset_type": asset.asset_type, "path": asset.path, "sha256": asset.sha256, "approval_status": asset.approval_status, "source_ref": asset.source_ref} for asset in assets],

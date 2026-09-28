@@ -119,6 +119,13 @@ class ApprovalRow(Base):
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class ConceptGateRow(Base):
+    __tablename__ = "concept_gates"
+    title_id: Mapped[str] = mapped_column(ForeignKey("titles.title_id"), primary_key=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class EditorialFindingRow(Base):
     __tablename__ = "editorial_findings"
     finding_id: Mapped[str] = mapped_column(String, primary_key=True)

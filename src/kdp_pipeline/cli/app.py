@@ -7,6 +7,8 @@ import typer
 from sqlalchemy import select
 
 from kdp_pipeline.context import ContextManifest
+from kdp_pipeline.concept import (ConceptService, accept_concept, enable_concept_gate,
+                                  score_concept_asset, validate_concept_asset)
 from kdp_pipeline.core.state_machine import TitleState
 from kdp_pipeline.chapter import ChapterService, accept_chapter
 from kdp_pipeline.continuity import ContinuityService, approve_canon_proposal
@@ -49,6 +51,7 @@ inspect_app = typer.Typer()
 providers_app = typer.Typer(help="Configure and inspect local provider profiles")
 pricing_app = typer.Typer(help="Configure local model pricing")
 budget_app = typer.Typer(help="Configure project generation budgets")
+concept_app = typer.Typer(help="Develop and validate book concepts")
 app.add_typer(positioning_app, name="positioning")
 app.add_typer(brief_app, name="brief")
 app.add_typer(outline_app, name="outline")
@@ -61,6 +64,7 @@ app.add_typer(inspect_app, name="inspect")
 app.add_typer(providers_app, name="providers")
 app.add_typer(pricing_app, name="pricing")
 app.add_typer(budget_app, name="budget")
+app.add_typer(concept_app, name="concept")
 
 
 def _root(root: Path | None) -> Path:
@@ -189,6 +193,76 @@ def _print_generation_result(result) -> None:
         "asset_id": result.asset.asset_id,
         "output_path": str(result.output_path),
     }))
+
+
+def _run_concept(root: Path, title_id: str, artifact: str, audience: str = "", asset_id: str | None = None,
+                 selection: str = ""):
+    return asyncio.run(ConceptService.generate(root, title_id=title_id, artifact=artifact,
+                                               audience=audience, concept_asset_id=asset_id, selection=selection))
+
+
+@concept_app.command("enable")
+def concept_enable(title_id: str, root: Path | None = typer.Option(None)):
+    try:
+        enabled = enable_concept_gate(_root(root), title_id, True)
+        typer.echo(json.dumps({"title_id": title_id, "concept_validation_enabled": enabled}))
+    except (OSError, ValueError) as e:
+        typer.echo(f"Error: {e}", err=True); raise typer.Exit(code=2)
+
+
+@concept_app.command("disable")
+def concept_disable(title_id: str, root: Path | None = typer.Option(None)):
+    try:
+        enabled = enable_concept_gate(_root(root), title_id, False)
+        typer.echo(json.dumps({"title_id": title_id, "concept_validation_enabled": enabled}))
+    except (OSError, ValueError) as e:
+        typer.echo(f"Error: {e}", err=True); raise typer.Exit(code=2)
+
+
+@concept_app.command("audience-brief")
+def concept_audience_brief(title_id: str, audience: str = typer.Option("", help="Explicit reader age/stage and context"), root: Path | None = typer.Option(None)):
+    try: _print_generation_result(_run_concept(_root(root), title_id, "audience-brief", audience))
+    except (OSError, ValueError, RuntimeError) as e: typer.echo(f"Error: {e}", err=True); raise typer.Exit(code=2)
+
+
+@concept_app.command("generate-seeds")
+def concept_generate_seeds(title_id: str, asset_id: str = typer.Option(..., help="Audience brief asset"), root: Path | None = typer.Option(None)):
+    try: _print_generation_result(_run_concept(_root(root), title_id, "generate-seeds", asset_id=asset_id))
+    except (OSError, ValueError, RuntimeError) as e: typer.echo(f"Error: {e}", err=True); raise typer.Exit(code=2)
+
+
+@concept_app.command("enrich")
+def concept_enrich(title_id: str, asset_id: str = typer.Option(..., help="Seed-set asset"), selection: str = typer.Option(..., help="Explicit selected seed label/text"), root: Path | None = typer.Option(None)):
+    try: _print_generation_result(_run_concept(_root(root), title_id, "enrich", asset_id=asset_id, selection=selection))
+    except (OSError, ValueError, RuntimeError) as e: typer.echo(f"Error: {e}", err=True); raise typer.Exit(code=2)
+
+
+@concept_app.command("validate")
+def concept_validate(asset_id: str, root: Path | None = typer.Option(None)):
+    try:
+        report, asset = validate_concept_asset(_root(root), asset_id)
+        typer.echo(json.dumps({"asset_id": asset.asset_id, "path": asset.path, "report": report}, indent=2))
+    except (OSError, ValueError) as e: typer.echo(f"Error: {e}", err=True); raise typer.Exit(code=2)
+
+
+@concept_app.command("score")
+def concept_score(title_id: str, asset_id: str = typer.Option(..., help="Enriched concept brief asset"), root: Path | None = typer.Option(None)):
+    try: _print_generation_result(_run_concept(_root(root), title_id, "score", asset_id=asset_id))
+    except (OSError, ValueError, RuntimeError) as e: typer.echo(f"Error: {e}", err=True); raise typer.Exit(code=2)
+
+
+@concept_app.command("approve")
+def concept_approve(asset_id: str, reviewer: str = typer.Option(...), root: Path | None = typer.Option(None)):
+    try:
+        result = accept_concept(_root(root), asset_id, reviewer)
+        typer.echo(json.dumps({"asset_id": result.accepted_asset.asset_id, "approval_id": result.approval.approval_id, "path": str(result.destination_path)}))
+    except (OSError, ValueError) as e: typer.echo(f"Error: {e}", err=True); raise typer.Exit(code=2)
+
+
+@concept_app.command("drafting-brief")
+def concept_drafting_brief(title_id: str, asset_id: str = typer.Option(..., help="Accepted concept brief asset"), root: Path | None = typer.Option(None)):
+    try: _print_generation_result(_run_concept(_root(root), title_id, "drafting-brief", asset_id=asset_id))
+    except (OSError, ValueError, RuntimeError) as e: typer.echo(f"Error: {e}", err=True); raise typer.Exit(code=2)
 
 
 @positioning_app.command("create")
@@ -549,6 +623,15 @@ def inspect_title_cmd(title_id: str, root: Path | None = typer.Option(None)):
 def inspect_assets(title_id: str, root: Path | None = typer.Option(None)):
     try:
         _print_inspection(title_id, _root(root), "assets")
+    except (OSError, ValueError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
+
+
+@inspect_app.command("concept")
+def inspect_concept(title_id: str, root: Path | None = typer.Option(None)):
+    try:
+        _print_inspection(title_id, _root(root), "concept")
     except (OSError, ValueError) as e:
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(code=2)

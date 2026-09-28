@@ -8,7 +8,8 @@ from kdp_pipeline.generation import GenerationRunResult, GenerationService
 from kdp_pipeline.models.planning import PlanningArtifactKind, spec_for
 from kdp_pipeline.prompts import PromptRegistry
 from kdp_pipeline.providers import ModelProvider
-from kdp_pipeline.storage.db import TitleRow
+from kdp_pipeline.storage.db import ApprovalRow, AssetRow, ConceptGateRow, TitleRow
+from kdp_pipeline.storage.files import sha256_file
 from kdp_pipeline.storage.service import session_scope
 
 
@@ -39,6 +40,17 @@ class PlanningService:
                 raise ValueError(f"Unknown title: {title_id}")
             if title.status not in {"IDEA", "VALIDATED"}:
                 raise ValueError("Planning generation requires an IDEA or VALIDATED title")
+            concept_gate = session.get(ConceptGateRow, title_id)
+            if artifact_kind == PlanningArtifactKind.POSITIONING and concept_gate and concept_gate.enabled:
+                accepted_brief = session.query(AssetRow).filter_by(
+                    title_id=title_id, asset_type="concept.brief", approval_status="accepted"
+                ).first()
+                approval = session.query(ApprovalRow).filter_by(
+                    asset_id=accepted_brief.asset_id, decision="accepted"
+                ).first() if accepted_brief else None
+                if (accepted_brief is None or approval is None or not Path(accepted_brief.path).is_file()
+                        or sha256_file(Path(accepted_brief.path)) != accepted_brief.sha256):
+                    raise ValueError("Concept validation is enabled; accept a concept brief before generating positioning")
             title_values = {
                 "title_id": title.title_id,
                 "working_title": title.working_title,

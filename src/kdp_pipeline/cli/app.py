@@ -7,13 +7,23 @@ import typer
 from sqlalchemy import select
 
 from kdp_pipeline.context import ContextManifest
+from kdp_pipeline.concept import (ConceptService, accept_concept, enable_concept_gate,
+                                  score_concept_asset, validate_concept_asset)
+from kdp_pipeline.chapters import chapter_status, queue_chapters, record_chapter_summary, resume_queue, stop_queue
 from kdp_pipeline.core.state_machine import TitleState
 from kdp_pipeline.chapter import ChapterService, accept_chapter
+from kdp_pipeline.build import accept_matter, build_manuscript, register_matter
 from kdp_pipeline.continuity import ContinuityService, approve_canon_proposal
 from kdp_pipeline.editorial import EditorialService
+from kdp_pipeline.editorial import StructuredEditorialService, create_revision_recommendation
 from kdp_pipeline.inspection import doctor as run_doctor, inspect_title
+from kdp_pipeline.verification import (add_verification_flag, decide_rights_record,
+    decide_verification, record_rights, scan_scripture_placeholders)
+from kdp_pipeline.workspace import generate_dashboard
 from kdp_pipeline.models.planning import PlanningArtifactKind
 from kdp_pipeline.planning import PlanningService, accept_planning_artifact
+from kdp_pipeline.release import (create_release_candidate, export_release_packet,
+    record_candidate_check, review_release_candidate)
 from kdp_pipeline.providers.settings import ProviderProfileSettings
 from kdp_pipeline.providers.configuration import (
     add_provider_profile, check_provider_profile, list_provider_profiles,
@@ -49,6 +59,13 @@ inspect_app = typer.Typer()
 providers_app = typer.Typer(help="Configure and inspect local provider profiles")
 pricing_app = typer.Typer(help="Configure local model pricing")
 budget_app = typer.Typer(help="Configure project generation budgets")
+concept_app = typer.Typer(help="Develop and validate book concepts")
+chapters_app = typer.Typer(help="Queue and inspect bounded chapter work")
+verification_app = typer.Typer(help="Track Scripture, source, and expert verification")
+rights_app = typer.Typer(help="Track rights and licensing review")
+build_app = typer.Typer(help="Assemble accepted manuscript assets")
+release_app = typer.Typer(help="Freeze and review release candidates")
+workspace_app = typer.Typer(help="Generate a local read-only operator workspace")
 app.add_typer(positioning_app, name="positioning")
 app.add_typer(brief_app, name="brief")
 app.add_typer(outline_app, name="outline")
@@ -61,6 +78,13 @@ app.add_typer(inspect_app, name="inspect")
 app.add_typer(providers_app, name="providers")
 app.add_typer(pricing_app, name="pricing")
 app.add_typer(budget_app, name="budget")
+app.add_typer(concept_app, name="concept")
+app.add_typer(chapters_app, name="chapters")
+app.add_typer(verification_app, name="verify")
+app.add_typer(rights_app, name="rights")
+app.add_typer(build_app, name="build")
+app.add_typer(release_app, name="release")
+app.add_typer(workspace_app, name="workspace")
 
 
 def _root(root: Path | None) -> Path:
@@ -189,6 +213,133 @@ def _print_generation_result(result) -> None:
         "asset_id": result.asset.asset_id,
         "output_path": str(result.output_path),
     }))
+
+
+def _run_concept(root: Path, title_id: str, artifact: str, audience: str = "", asset_id: str | None = None,
+                 selection: str = ""):
+    return asyncio.run(ConceptService.generate(root, title_id=title_id, artifact=artifact,
+                                               audience=audience, concept_asset_id=asset_id, selection=selection))
+
+
+@concept_app.command("enable")
+def concept_enable(title_id: str, root: Path | None = typer.Option(None)):
+    try:
+        enabled = enable_concept_gate(_root(root), title_id, True)
+        typer.echo(json.dumps({"title_id": title_id, "concept_validation_enabled": enabled}))
+    except (OSError, ValueError) as e:
+        typer.echo(f"Error: {e}", err=True); raise typer.Exit(code=2)
+
+
+@concept_app.command("disable")
+def concept_disable(title_id: str, root: Path | None = typer.Option(None)):
+    try:
+        enabled = enable_concept_gate(_root(root), title_id, False)
+        typer.echo(json.dumps({"title_id": title_id, "concept_validation_enabled": enabled}))
+    except (OSError, ValueError) as e:
+        typer.echo(f"Error: {e}", err=True); raise typer.Exit(code=2)
+
+
+@concept_app.command("audience-brief")
+def concept_audience_brief(title_id: str, audience: str = typer.Option("", help="Explicit reader age/stage and context"), root: Path | None = typer.Option(None)):
+    try: _print_generation_result(_run_concept(_root(root), title_id, "audience-brief", audience))
+    except (OSError, ValueError, RuntimeError) as e: typer.echo(f"Error: {e}", err=True); raise typer.Exit(code=2)
+
+
+@concept_app.command("generate-seeds")
+def concept_generate_seeds(title_id: str, asset_id: str = typer.Option(..., help="Audience brief asset"), root: Path | None = typer.Option(None)):
+    try: _print_generation_result(_run_concept(_root(root), title_id, "generate-seeds", asset_id=asset_id))
+    except (OSError, ValueError, RuntimeError) as e: typer.echo(f"Error: {e}", err=True); raise typer.Exit(code=2)
+
+
+@concept_app.command("enrich")
+def concept_enrich(title_id: str, asset_id: str = typer.Option(..., help="Seed-set asset"), selection: str = typer.Option(..., help="Explicit selected seed label/text"), root: Path | None = typer.Option(None)):
+    try: _print_generation_result(_run_concept(_root(root), title_id, "enrich", asset_id=asset_id, selection=selection))
+    except (OSError, ValueError, RuntimeError) as e: typer.echo(f"Error: {e}", err=True); raise typer.Exit(code=2)
+
+
+@concept_app.command("validate")
+def concept_validate(asset_id: str, root: Path | None = typer.Option(None)):
+    try:
+        report, asset = validate_concept_asset(_root(root), asset_id)
+        typer.echo(json.dumps({"asset_id": asset.asset_id, "path": asset.path, "report": report}, indent=2))
+    except (OSError, ValueError) as e: typer.echo(f"Error: {e}", err=True); raise typer.Exit(code=2)
+
+
+@concept_app.command("score")
+def concept_score(title_id: str, asset_id: str = typer.Option(..., help="Enriched concept brief asset"), root: Path | None = typer.Option(None)):
+    try: _print_generation_result(_run_concept(_root(root), title_id, "score", asset_id=asset_id))
+    except (OSError, ValueError, RuntimeError) as e: typer.echo(f"Error: {e}", err=True); raise typer.Exit(code=2)
+
+
+@concept_app.command("approve")
+def concept_approve(asset_id: str, reviewer: str = typer.Option(...), root: Path | None = typer.Option(None)):
+    try:
+        result = accept_concept(_root(root), asset_id, reviewer)
+        typer.echo(json.dumps({"asset_id": result.accepted_asset.asset_id, "approval_id": result.approval.approval_id, "path": str(result.destination_path)}))
+    except (OSError, ValueError) as e: typer.echo(f"Error: {e}", err=True); raise typer.Exit(code=2)
+
+
+@concept_app.command("drafting-brief")
+def concept_drafting_brief(title_id: str, asset_id: str = typer.Option(..., help="Accepted concept brief asset"), root: Path | None = typer.Option(None)):
+    try: _print_generation_result(_run_concept(_root(root), title_id, "drafting-brief", asset_id=asset_id))
+    except (OSError, ValueError, RuntimeError) as e: typer.echo(f"Error: {e}", err=True); raise typer.Exit(code=2)
+
+
+@chapters_app.command("list")
+def chapters_list(title_id: str, root: Path | None = typer.Option(None)):
+    try: typer.echo(json.dumps(chapter_status(_root(root), title_id), indent=2))
+    except (OSError, ValueError) as e: typer.echo(f"Error: {e}", err=True); raise typer.Exit(code=2)
+
+
+@chapters_app.command("status")
+def chapters_status(title_id: str, root: Path | None = typer.Option(None)):
+    chapters_list(title_id, root)
+
+
+@chapters_app.command("queue")
+def chapters_queue(title_id: str, through: int = typer.Option(..., min=1), start: int = typer.Option(1, min=1), root: Path | None = typer.Option(None)):
+    try:
+        rows = queue_chapters(_root(root), title_id, start, through)
+        typer.echo(json.dumps([{"chapter_number": r.chapter_number, "status": r.status, "queue_item_id": r.queue_item_id} for r in rows], indent=2))
+    except (OSError, ValueError) as e: typer.echo(f"Error: {e}", err=True); raise typer.Exit(code=2)
+
+
+@chapters_app.command("stop")
+def chapters_stop(title_id: str, root: Path | None = typer.Option(None)):
+    try: typer.echo(json.dumps({"paused_items": stop_queue(_root(root), title_id)}))
+    except (OSError, ValueError) as e: typer.echo(f"Error: {e}", err=True); raise typer.Exit(code=2)
+
+
+@chapters_app.command("resume")
+def chapters_resume(title_id: str, root: Path | None = typer.Option(None)):
+    try: typer.echo(json.dumps({"resumed_items": resume_queue(_root(root), title_id)}))
+    except (OSError, ValueError) as e: typer.echo(f"Error: {e}", err=True); raise typer.Exit(code=2)
+
+
+@chapters_app.command("next")
+def chapters_next(title_id: str, draft: bool = typer.Option(False, help="Draft only this one queued chapter"), root: Path | None = typer.Option(None)):
+    try:
+        report = chapter_status(_root(root), title_id)
+        candidate = report["next_chapter"]
+        if candidate is None:
+            typer.echo(json.dumps({"next_chapter": None, "message": "No queued chapter is ready for work.", **report}))
+        elif draft:
+            if candidate["status"] != "queued":
+                raise ValueError(f"Next chapter is {candidate['status']}; draft flag requires a queued chapter")
+            _print_generation_result(asyncio.run(ChapterService.draft(_root(root), title_id=title_id,
+                chapter_number=candidate["chapter_number"])))
+        else:
+            typer.echo(json.dumps({"next_chapter": candidate}, indent=2))
+    except (OSError, ValueError, RuntimeError) as e: typer.echo(f"Error: {e}", err=True); raise typer.Exit(code=2)
+
+
+@chapters_app.command("summary")
+def chapters_summary(title_id: str, chapter_number: int = typer.Option(..., min=1), asset_id: str = typer.Option(...),
+                     summary: str = typer.Option(...), reviewer: str = typer.Option(...), root: Path | None = typer.Option(None)):
+    try:
+        asset = record_chapter_summary(_root(root), title_id, chapter_number, asset_id, summary, reviewer)
+        typer.echo(json.dumps({"asset_id": asset.asset_id, "path": asset.path, "sha256": asset.sha256}))
+    except (OSError, ValueError) as e: typer.echo(f"Error: {e}", err=True); raise typer.Exit(code=2)
 
 
 @positioning_app.command("create")
@@ -477,15 +628,195 @@ def chapter_continuity(title_id: str, chapter_number: int, asset_id: str = typer
 
 @editorial_app.command("run")
 def editorial_run(title_id: str, chapter_number: int, asset_id: str = typer.Option(...), pass_name: str = typer.Option("developmental", "--pass"), root: Path | None = typer.Option(None)):
-    if pass_name != "developmental":
-        typer.echo("Error: only the developmental pass is implemented in Sprint 4", err=True)
-        raise typer.Exit(code=2)
     try:
-        result = _run_chapter(_root(root), title_id, chapter_number, "editorial", asset_id=asset_id)
+        if pass_name == "developmental":
+            result = _run_chapter(_root(root), title_id, chapter_number, "editorial", asset_id=asset_id)
+            typer.echo(json.dumps({"finding_id": result.finding.finding_id, "analysis_asset_id": result.generation.asset.asset_id}))
+            return
+        result = asyncio.run(StructuredEditorialService.analyze(_root(root), title_id=title_id,
+            chapter_number=chapter_number, source_asset_id=asset_id, pass_type=pass_name))
     except (OSError, ValueError, RuntimeError) as e:
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(code=2)
-    typer.echo(json.dumps({"finding_id": result.finding.finding_id, "analysis_asset_id": result.generation.asset.asset_id}))
+    typer.echo(json.dumps({"job_id": result.generation.job.job_id, "analysis_asset_id": result.generation.asset.asset_id,
+        "pass_type": pass_name, "status": result.output.status,
+        "findings": [finding.finding_id for finding in result.findings]}))
+
+
+@editorial_app.command("recommend")
+def editorial_recommend(title_id: str, chapter_number: int, asset_id: str = typer.Option(...),
+                        finding_ids: list[str] = typer.Option(..., "--finding-id"), owner: str = typer.Option(...),
+                        root: Path | None = typer.Option(None)):
+    try:
+        result = create_revision_recommendation(_root(root), title_id=title_id, chapter_number=chapter_number,
+            source_asset_id=asset_id, finding_ids=finding_ids, owner=owner)
+        typer.echo(json.dumps({"recommendation_id": result.recommendation_id, "status": result.status,
+                               "finding_ids": finding_ids}))
+    except (OSError, ValueError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
+
+
+@verification_app.command("scan-scripture")
+def verification_scan_scripture(title_id: str, root: Path | None = typer.Option(None)):
+    try:
+        result = scan_scripture_placeholders(_root(root), title_id)
+    except (OSError, ValueError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
+    typer.echo(json.dumps(result))
+
+
+@verification_app.command("add-flag")
+def verification_add_flag(title_id: str, kind: str, locator: str, exact_text: str,
+                          reviewer: str = typer.Option(...), asset_id: str | None = typer.Option(None),
+                          root: Path | None = typer.Option(None)):
+    try:
+        row = add_verification_flag(_root(root), title_id=title_id, kind=kind,
+            locator=locator, exact_text=exact_text, reviewer=reviewer, asset_id=asset_id)
+    except (OSError, ValueError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
+    typer.echo(json.dumps({"verification_id": row.verification_id, "kind": row.kind, "status": row.status}))
+
+
+@verification_app.command("decide")
+def verification_decide(verification_id: str, decision: str, reviewer: str = typer.Option(...),
+                        rationale: str = typer.Option(...), evidence_reference: str | None = typer.Option(None),
+                        reference: str | None = typer.Option(None), source_policy: str | None = typer.Option(None),
+                        root: Path | None = typer.Option(None)):
+    try:
+        row = decide_verification(_root(root), verification_id, decision=decision, reviewer=reviewer,
+            rationale=rationale, evidence_reference=evidence_reference, proposed_reference=reference,
+            source_policy=source_policy)
+    except (OSError, ValueError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
+    typer.echo(json.dumps({"verification_id": row.verification_id, "status": row.status,
+                           "reference": row.proposed_reference}))
+
+
+@rights_app.command("add")
+def rights_add(title_id: str, material_type: str, description: str, reviewer: str = typer.Option(...),
+               asset_id: str | None = typer.Option(None), source: str | None = typer.Option(None),
+               provenance_reference: str | None = typer.Option(None),
+               legal_basis: str | None = typer.Option(None), evidence_reference: str | None = typer.Option(None),
+               territories: list[str] = typer.Option([]), term: str | None = typer.Option(None),
+               restrictions: str | None = typer.Option(None), root: Path | None = typer.Option(None)):
+    try:
+        row = record_rights(_root(root), title_id=title_id, material_type=material_type,
+            description=description, reviewer=reviewer, asset_id=asset_id, source=source,
+            provenance_reference=provenance_reference,
+            legal_basis=legal_basis, evidence_reference=evidence_reference,
+            territories=territories, term=term, restrictions=restrictions)
+    except (OSError, ValueError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
+    typer.echo(json.dumps({"rights_record_id": row.rights_record_id, "status": row.status}))
+
+
+@rights_app.command("decide")
+def rights_decide(rights_record_id: str, decision: str, reviewer: str = typer.Option(...),
+                  rationale: str = typer.Option(...), root: Path | None = typer.Option(None)):
+    try:
+        row = decide_rights_record(_root(root), rights_record_id, decision=decision,
+            reviewer=reviewer, rationale=rationale)
+    except (OSError, ValueError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
+    typer.echo(json.dumps({"rights_record_id": row.rights_record_id, "status": row.status}))
+
+
+@build_app.command("manuscript")
+def manuscript_build(title_id: str, builder: str = typer.Option("cli-user"),
+                     root: Path | None = typer.Option(None)):
+    try:
+        result = build_manuscript(_root(root), title_id=title_id, builder=builder)
+    except (OSError, ValueError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
+    typer.echo(json.dumps({"build_id": result.build.build_id, "asset_id": result.asset.asset_id,
+        "status": result.build.status, "path": result.asset.path,
+        "manifest_path": result.build.manifest_path, "blocker_count": len(result.manifest["blockers"])}))
+
+
+@build_app.command("matter-add")
+def manuscript_matter_add(title_id: str, section: str, source_file: Path,
+                          creator: str = typer.Option(...), root: Path | None = typer.Option(None)):
+    try:
+        row = register_matter(_root(root), title_id=title_id, section=section,
+            source_path=source_file, creator=creator)
+    except (OSError, ValueError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
+    typer.echo(json.dumps({"asset_id": row.asset_id, "asset_type": row.asset_type,
+                           "approval_status": row.approval_status, "path": row.path}))
+
+
+@build_app.command("matter-accept")
+def manuscript_matter_accept(asset_id: str, reviewer: str = typer.Option(...),
+                             root: Path | None = typer.Option(None)):
+    try:
+        asset, approval = accept_matter(_root(root), asset_id, reviewer=reviewer)
+    except (OSError, ValueError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
+    typer.echo(json.dumps({"asset_id": asset.asset_id, "approval_id": approval.approval_id,
+                           "path": asset.path}))
+
+
+@release_app.command("candidate")
+def release_candidate(title_id: str, build_id: str, creator: str = typer.Option(...),
+                      root: Path | None = typer.Option(None)):
+    try:
+        row = create_release_candidate(_root(root), title_id=title_id,
+            build_id=build_id, creator=creator)
+    except (OSError, ValueError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
+    typer.echo(json.dumps({"candidate_id": row.candidate_id, "status": row.status,
+        "candidate_sha256": row.candidate_sha256}))
+
+
+@release_app.command("check")
+def release_check(candidate_id: str, domain: str, key: str, decision: str,
+                  reviewer: str = typer.Option(...), rationale: str = typer.Option(...),
+                  evidence_reference: str = typer.Option(...), value: str | None = typer.Option(None),
+                  statement: str | None = typer.Option(None), root: Path | None = typer.Option(None)):
+    try:
+        row = record_candidate_check(_root(root), candidate_id, domain=domain, key=key,
+            decision=decision, reviewer=reviewer, rationale=rationale,
+            evidence_reference=evidence_reference, value=value, statement=statement)
+    except (OSError, ValueError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
+    typer.echo(json.dumps({"candidate_id": row.candidate_id, "status": row.status}))
+
+
+@release_app.command("review")
+def release_review(candidate_id: str, decision: str, reviewer: str = typer.Option(...),
+                   rationale: str = typer.Option(...), root: Path | None = typer.Option(None)):
+    try:
+        row, approval = review_release_candidate(_root(root), candidate_id, decision=decision,
+            reviewer=reviewer, rationale=rationale)
+    except (OSError, ValueError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
+    typer.echo(json.dumps({"candidate_id": row.candidate_id, "status": row.status,
+        "approval_id": approval.approval_id if approval else None,
+        "approved": approval is not None and approval.decision == "accepted"}))
+
+
+@release_app.command("packet")
+def release_packet(candidate_id: str, creator: str = typer.Option(...),
+                   root: Path | None = typer.Option(None)):
+    try:
+        row, asset = export_release_packet(_root(root), candidate_id, creator=creator)
+    except (OSError, ValueError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
+    typer.echo(json.dumps({"packet_id": row.packet_id, "asset_id": asset.asset_id,
+                           "path": asset.path, "sha256": row.sha256}))
 
 
 @chapter_app.command("revise")
@@ -554,6 +885,51 @@ def inspect_assets(title_id: str, root: Path | None = typer.Option(None)):
         raise typer.Exit(code=2)
 
 
+@inspect_app.command("concept")
+def inspect_concept(title_id: str, root: Path | None = typer.Option(None)):
+    try:
+        _print_inspection(title_id, _root(root), "concept")
+    except (OSError, ValueError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
+
+
+@inspect_app.command("editorial")
+def inspect_editorial(title_id: str, root: Path | None = typer.Option(None)):
+    try:
+        _print_inspection(title_id, _root(root), "editorial")
+    except (OSError, ValueError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
+
+
+@inspect_app.command("verification")
+def inspect_verification(title_id: str, root: Path | None = typer.Option(None)):
+    try:
+        _print_inspection(title_id, _root(root), "verification")
+    except (OSError, ValueError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
+
+
+@inspect_app.command("builds")
+def inspect_builds(title_id: str, root: Path | None = typer.Option(None)):
+    try:
+        _print_inspection(title_id, _root(root), "builds")
+    except (OSError, ValueError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
+
+
+@inspect_app.command("release")
+def inspect_release(title_id: str, root: Path | None = typer.Option(None)):
+    try:
+        _print_inspection(title_id, _root(root), "release")
+    except (OSError, ValueError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
+
+
 @inspect_app.command("jobs")
 def inspect_jobs(title_id: str, root: Path | None = typer.Option(None)):
     try:
@@ -615,6 +991,18 @@ def doctor(root: Path | None = typer.Option(None)):
         typer.echo(f"{check['status']}: {check['check']} — {check['message']}")
         if check["status"] != "OK" and check["recommended_action"]:
             typer.echo(f"  Action: {check['recommended_action']}")
+
+
+@workspace_app.command("dashboard")
+def workspace_dashboard(output: Path | None = typer.Option(None, "--output"),
+                        root: Path | None = typer.Option(None)):
+    try:
+        result = generate_dashboard(_root(root), output_path=output)
+    except (OSError, ValueError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
+    typer.echo(json.dumps({"output_path": str(result.output_path),
+        "project_count": result.project_count, "title_count": result.title_count}))
 
 
 if __name__ == "__main__":

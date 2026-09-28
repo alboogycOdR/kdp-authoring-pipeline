@@ -11,6 +11,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
     create_engine,
     inspect as sqlalchemy_inspect,
     text,
@@ -119,6 +120,24 @@ class ApprovalRow(Base):
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class ConceptGateRow(Base):
+    __tablename__ = "concept_gates"
+    title_id: Mapped[str] = mapped_column(ForeignKey("titles.title_id"), primary_key=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class ChapterQueueRow(Base):
+    __tablename__ = "chapter_queue"
+    __table_args__ = (UniqueConstraint("title_id", "chapter_number", name="uq_chapter_queue_title_number"),)
+    queue_item_id: Mapped[str] = mapped_column(String, primary_key=True)
+    title_id: Mapped[str] = mapped_column(ForeignKey("titles.title_id"), nullable=False)
+    chapter_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String, nullable=False, default="queued")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class EditorialFindingRow(Base):
     __tablename__ = "editorial_findings"
     finding_id: Mapped[str] = mapped_column(String, primary_key=True)
@@ -134,6 +153,108 @@ class EditorialFindingRow(Base):
     owner: Mapped[str | None] = mapped_column(String, nullable=True)
     resolution: Mapped[str | None] = mapped_column(Text, nullable=True)
     snapshot_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class RevisionRecommendationRow(Base):
+    __tablename__ = "revision_recommendations"
+    recommendation_id: Mapped[str] = mapped_column(String, primary_key=True)
+    title_id: Mapped[str] = mapped_column(ForeignKey("titles.title_id"), nullable=False)
+    chapter_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    source_asset_id: Mapped[str] = mapped_column(ForeignKey("assets.asset_id"), nullable=False)
+    finding_ids_json: Mapped[str] = mapped_column(Text, default="[]")
+    recommendation: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String, nullable=False, default="open")
+    owner: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class VerificationItemRow(Base):
+    __tablename__ = "verification_items"
+    __table_args__ = (UniqueConstraint("asset_id", "kind", "locator", "exact_text", name="uq_verification_source_locator"),)
+    verification_id: Mapped[str] = mapped_column(String, primary_key=True)
+    title_id: Mapped[str] = mapped_column(ForeignKey("titles.title_id"), nullable=False)
+    asset_id: Mapped[str | None] = mapped_column(ForeignKey("assets.asset_id"), nullable=True)
+    kind: Mapped[str] = mapped_column(String, nullable=False)
+    locator: Mapped[str] = mapped_column(Text, nullable=False)
+    exact_text: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String, nullable=False, default="pending")
+    proposed_reference: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_policy: Mapped[str | None] = mapped_column(Text, nullable=True)
+    evidence_reference: Mapped[str | None] = mapped_column(Text, nullable=True)
+    rationale: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reviewer: Mapped[str | None] = mapped_column(String, nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class RightsLogRow(Base):
+    __tablename__ = "rights_log"
+    rights_record_id: Mapped[str] = mapped_column(String, primary_key=True)
+    title_id: Mapped[str] = mapped_column(ForeignKey("titles.title_id"), nullable=False)
+    asset_id: Mapped[str | None] = mapped_column(ForeignKey("assets.asset_id"), nullable=True)
+    material_type: Mapped[str] = mapped_column(String, nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    source: Mapped[str | None] = mapped_column(Text, nullable=True)
+    provenance_reference: Mapped[str | None] = mapped_column(Text, nullable=True)
+    legal_basis: Mapped[str | None] = mapped_column(Text, nullable=True)
+    evidence_reference: Mapped[str | None] = mapped_column(Text, nullable=True)
+    territories_json: Mapped[str] = mapped_column(Text, default="[]")
+    term: Mapped[str | None] = mapped_column(Text, nullable=True)
+    restrictions: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String, nullable=False, default="pending")
+    rationale: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reviewer: Mapped[str | None] = mapped_column(String, nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class ManuscriptBuildRow(Base):
+    __tablename__ = "manuscript_builds"
+    build_id: Mapped[str] = mapped_column(String, primary_key=True)
+    title_id: Mapped[str] = mapped_column(ForeignKey("titles.title_id"), nullable=False)
+    asset_id: Mapped[str] = mapped_column(ForeignKey("assets.asset_id"), nullable=False)
+    status: Mapped[str] = mapped_column(String, nullable=False)
+    output_format: Mapped[str] = mapped_column(String, nullable=False, default="markdown")
+    output_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    manifest_path: Mapped[str] = mapped_column(Text, nullable=False)
+    manifest_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    included_assets_json: Mapped[str] = mapped_column(Text, default="[]")
+    blockers_json: Mapped[str] = mapped_column(Text, default="[]")
+    created_by: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class ReleaseCandidateRow(Base):
+    __tablename__ = "release_candidate_records"
+    candidate_id: Mapped[str] = mapped_column(String, primary_key=True)
+    title_id: Mapped[str] = mapped_column(ForeignKey("titles.title_id"), nullable=False)
+    build_id: Mapped[str] = mapped_column(ForeignKey("manuscript_builds.build_id"), nullable=False)
+    candidate_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    frozen_inputs_json: Mapped[str] = mapped_column(Text, default="[]")
+    frozen_metadata_json: Mapped[str] = mapped_column(Text, default="{}")
+    rights_summary_json: Mapped[str] = mapped_column(Text, default="{}")
+    ai_use_summary_json: Mapped[str] = mapped_column(Text, default="{}")
+    verification_state_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    rights_state_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    metadata_checks_json: Mapped[str] = mapped_column(Text, default="{}")
+    ai_disclosure_json: Mapped[str] = mapped_column(Text, default="{}")
+    kdp_checks_json: Mapped[str] = mapped_column(Text, default="{}")
+    initial_blockers_json: Mapped[str] = mapped_column(Text, default="[]")
+    status: Mapped[str] = mapped_column(String, nullable=False, default="blocked")
+    created_by: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class ReleasePacketRow(Base):
+    __tablename__ = "release_packets"
+    packet_id: Mapped[str] = mapped_column(String, primary_key=True)
+    candidate_id: Mapped[str] = mapped_column(ForeignKey("release_candidate_records.candidate_id"), nullable=False)
+    title_id: Mapped[str] = mapped_column(ForeignKey("titles.title_id"), nullable=False)
+    asset_id: Mapped[str] = mapped_column(ForeignKey("assets.asset_id"), nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    blockers_json: Mapped[str] = mapped_column(Text, default="[]")
+    created_by: Mapped[str] = mapped_column(String, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 

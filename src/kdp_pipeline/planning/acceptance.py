@@ -10,7 +10,7 @@ from sqlalchemy import select
 from kdp_pipeline.core.ids import new_id
 from kdp_pipeline.models.planning import PlanningArtifactKind, spec_for
 from kdp_pipeline.storage.audit import AuditEventWriter
-from kdp_pipeline.storage.db import AssetRow, ApprovalRow, ProvenanceRow, ProjectRow, TitleRow, utcnow
+from kdp_pipeline.storage.db import AssetRow, ApprovalRow, ConceptGateRow, ProvenanceRow, ProjectRow, TitleRow, utcnow
 from kdp_pipeline.storage.files import sha256_file
 from kdp_pipeline.storage.service import planning_requirements_met, session_scope
 
@@ -70,6 +70,15 @@ def accept_planning_artifact(
             project = session.get(ProjectRow, title.project_id) if title else None
             if title is None or project is None:
                 raise PlanningAcceptanceError("Planning asset has no valid title/project")
+            gate = session.get(ConceptGateRow, title.title_id)
+            if kind == PlanningArtifactKind.POSITIONING and gate and gate.enabled:
+                concept_brief = session.scalar(select(AssetRow).where(
+                    AssetRow.title_id == title.title_id, AssetRow.asset_type == "concept.brief",
+                    AssetRow.approval_status == "accepted"))
+                concept_approval = session.scalar(select(ApprovalRow).where(
+                    ApprovalRow.asset_id == concept_brief.asset_id, ApprovalRow.decision == "accepted")) if concept_brief else None
+                if concept_brief is None or concept_approval is None:
+                    raise PlanningAcceptanceError("Concept validation is enabled; accept a concept brief before accepting positioning")
             source_path = Path(source.path)
             if not source_path.is_file():
                 raise PlanningAcceptanceError(f"Experimental source file is missing: {source_path}")

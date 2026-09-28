@@ -63,8 +63,16 @@ def _title_card(report: dict) -> str:
             pass_counts[finding["pass_type"]] = pass_counts.get(finding["pass_type"], 0) + 1
     editorial_summary = [f"{name}: {count} open" for name, count in sorted(pass_counts.items())]
     proposal_summary = [f"{item['proposal_id']}: {item['status']}" for item in proposals]
-    verification_summary = [f"{item['type']}: {item.get('kind', item.get('condition', item.get('material_type', item['id'])))}"
-                            for item in verification["release_blockers"]]
+    verification_summary = []
+    for item in verification["release_blockers"]:
+        identifier = item.get("id")
+        detail = item.get("kind", item.get("condition", item.get("material_type")))
+        label = item["type"]
+        if identifier:
+            label += f" {identifier}"
+        if detail:
+            label += f": {detail}"
+        verification_summary.append(label)
     build_summary = [f"{item['build_id']}: {item['status']} ({item['output_format']})" for item in build_records]
     release_summary = [f"{item['candidate_id']}: {item['status']} ({len(item['current_blockers'])} blockers)"
                        for item in release["candidates"]]

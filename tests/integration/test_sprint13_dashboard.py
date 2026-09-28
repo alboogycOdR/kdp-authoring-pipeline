@@ -36,7 +36,7 @@ def test_static_dashboard_shows_workflow_summaries_without_secrets(tmp_path, mon
     assert "Concept and planning" in output
     assert "Chapters" in output and "Editorial and canon" in output
     assert "Verification blockers" in output and "source_claim" in output
-    assert flag.verification_id not in output
+    assert flag.verification_id in output
     assert "Builds" in output and "Release candidates" in output and "Human review queue" in output
     assert "read-only" in output
     assert "sk-dashboard-secret-must-never-appear" not in output

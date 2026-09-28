@@ -28,6 +28,38 @@ _REVIEW_DECISIONS = {"approve", "hold", "reject"}
 _MANUAL_PUBLICATION_CONDITION = "KDP upload and publication remain manual human-controlled actions."
 
 
+def _blocker_identity(blocker: dict) -> tuple:
+    """Return the stable identity for one review blocker."""
+    kind = blocker.get("type", "unknown")
+    reference_fields = {
+        "verification": ("verification_id", "id"),
+        "rights": ("rights_record_id", "id"),
+        "approval_condition": ("approval_id", "id"),
+        "metadata_check": ("key",),
+        "kdp_check": ("key",),
+    }
+    fields = reference_fields.get(kind)
+    if fields:
+        reference = next((blocker.get(field) for field in fields if blocker.get(field)), None)
+        if reference is not None:
+            return kind, reference
+    if kind == "scripture_placeholder":
+        return kind, blocker.get("asset_id"), blocker.get("locator"), blocker.get("text")
+    return kind, canonical_json_bytes(blocker).decode("utf-8")
+
+
+def _deduplicate_blockers(blockers: list[dict]) -> list[dict]:
+    """Preserve blocker order and the most detailed first instance."""
+    result: list[dict] = []
+    seen: set[tuple] = set()
+    for blocker in blockers:
+        identity = _blocker_identity(blocker)
+        if identity not in seen:
+            seen.add(identity)
+            result.append(blocker)
+    return result
+
+
 def _review_hash(candidate: ReleaseCandidateRow) -> str:
     return sha256_bytes(canonical_json_bytes({
         "candidate_sha256": candidate.candidate_sha256,
@@ -115,7 +147,7 @@ def _blockers(session, candidate: ReleaseCandidateRow) -> list[dict]:
     for key, value in kdp_checks.items():
         if value.get("status") not in _CHECK_DECISIONS:
             blockers.append({"type": "kdp_check", "key": key, "status": value.get("status", "pending")})
-    return blockers
+    return _deduplicate_blockers(blockers)
 
 
 def create_release_candidate(root: Path, *, title_id: str, build_id: str,
@@ -182,6 +214,7 @@ def create_release_candidate(root: Path, *, title_id: str, build_id: str,
             if item["status"] not in {"cleared", "not_applicable"}:
                 blockers.append({"type": "rights", "rights_record_id": item["rights_record_id"],
                     "asset_id": item["asset_id"], "status": item["status"]})
+        blockers = _deduplicate_blockers(blockers)
         candidate_id = new_id("REL")
         frozen = {"build_id": build_id, "build_sha256": build.output_sha256,
             "manifest_sha256": build.manifest_sha256, "inputs": frozen_inputs,

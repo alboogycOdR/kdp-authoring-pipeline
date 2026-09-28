@@ -3,7 +3,18 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, create_engine
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    create_engine,
+    inspect as sqlalchemy_inspect,
+    text,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 from sqlalchemy.pool import NullPool
 
@@ -172,6 +183,7 @@ class ProviderProfileRow(Base):
     api_key_env: Mapped[str | None] = mapped_column(String, nullable=True)
     default_max_output_tokens: Mapped[int] = mapped_column(Integer, default=1200, nullable=False)
     default_temperature: Mapped[float | None] = mapped_column(Float, nullable=True)
+    reasoning_effort: Mapped[str | None] = mapped_column(String, nullable=True)
     priority: Mapped[int | None] = mapped_column(Integer, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     metadata_json: Mapped[str] = mapped_column(Text, default="{}", nullable=False)
@@ -258,6 +270,11 @@ def init_db(root: Path) -> None:
     engine = engine_for(root)
     try:
         Base.metadata.create_all(engine)
+        # Additive migration for workspaces created before reasoning controls.
+        columns = {column["name"] for column in sqlalchemy_inspect(engine).get_columns("provider_profiles")}
+        if "reasoning_effort" not in columns:
+            with engine.begin() as connection:
+                connection.execute(text("ALTER TABLE provider_profiles ADD COLUMN reasoning_effort VARCHAR"))
     finally:
         engine.dispose()
 

@@ -133,7 +133,59 @@ def test_openai_gpt5_uses_reasoning_compatible_chat_parameters(monkeypatch):
     assert payload["max_completion_tokens"] == 64
     assert "max_tokens" not in payload
     assert "temperature" not in payload
+    assert "reasoning_effort" not in payload
     assert result.text == "positioning"
+
+
+@pytest.mark.parametrize("model", ["gpt-5", "o3"])
+def test_configured_official_reasoning_effort_is_sent_for_reasoning_models(monkeypatch, model):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-secret")
+    seen = {}
+
+    async def handler(request: httpx.Request):
+        seen["payload"] = json.loads(request.content)
+        return httpx.Response(200, json={"choices": [{"message": {"content": "useful output"}}]})
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    provider = OpenAICompatibleProvider(OpenAICompatibleConfig(
+        model=model, base_url="https://api.openai.com/v1", reasoning_effort="low",
+    ), client=client)
+    try:
+        result = run(provider.generate(make_request()))
+    finally:
+        run(client.aclose())
+    assert seen["payload"]["reasoning_effort"] == "low"
+    assert seen["payload"]["max_completion_tokens"] == 64
+    assert "temperature" not in seen["payload"]
+    assert result.text == "useful output"
+
+
+def test_reasoning_effort_is_omitted_for_non_reasoning_or_compatible_endpoint(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-secret")
+    payloads = []
+
+    async def handler(request: httpx.Request):
+        payloads.append(json.loads(request.content))
+        return httpx.Response(200, json={"choices": [{"message": {"content": "output"}}]})
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    providers = [
+        OpenAICompatibleProvider(OpenAICompatibleConfig(model="gpt-4.1", reasoning_effort="low"), client),
+        OpenAICompatibleProvider(OpenAICompatibleConfig(
+            model="gpt-5", base_url="https://compatible.example/v1", reasoning_effort="low",
+        ), client),
+    ]
+    try:
+        for provider in providers:
+            run(provider.generate(make_request()))
+    finally:
+        run(client.aclose())
+    assert all("reasoning_effort" not in payload for payload in payloads)
+
+
+def test_openai_compatible_config_rejects_unknown_reasoning_effort():
+    with pytest.raises(ValidationError):
+        OpenAICompatibleConfig(model="gpt-5", reasoning_effort="xhigh")
 
 
 def test_response_diagnostics_capture_safe_finish_refusal_and_token_details(monkeypatch):

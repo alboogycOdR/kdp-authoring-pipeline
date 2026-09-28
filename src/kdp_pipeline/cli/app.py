@@ -561,7 +561,17 @@ def providers_check(provider_id: str, connect: bool = typer.Option(False, "--con
 
 @pricing_app.command("list")
 def pricing_list(provider_id: str | None = typer.Option(None), root: Path | None = typer.Option(None)):
-    typer.echo(json.dumps(list_model_pricing(_root(root), provider_id), indent=2))
+    rows = list_model_pricing(_root(root), provider_id)
+    typer.echo(json.dumps(rows, indent=2))
+    if not rows:
+        scope = f" for provider profile {provider_id!r}" if provider_id else ""
+        typer.echo(
+            f"No model pricing is configured{scope}; usage costs will remain unknown. "
+            "Confirm the current official rates for the exact provider and model, then run: "
+            "kdp pricing set PROVIDER_ID MODEL --input-usd-per-million INPUT_RATE "
+            "--output-usd-per-million OUTPUT_RATE [--cached-input-usd-per-million CACHED_RATE]",
+            err=True,
+        )
 
 
 @pricing_app.command("set")

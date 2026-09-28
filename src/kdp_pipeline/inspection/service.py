@@ -17,7 +17,7 @@ from kdp_pipeline.continuity.service import ContinuityOutputInvalid, _validate_o
 from kdp_pipeline.storage.db import (
     AssetRow, ApprovalRow, AuditEventRow, CanonProposalRow, ChapterQueueRow, ConceptGateRow, EditorialFindingRow,
     JobRow, ProjectRow, ProvenanceRow, RevisionRecommendationRow, TitleRow,
-    ProviderProfileRow, ProjectProviderSelectionRow, ProjectBudgetRow,
+    ProviderProfileRow, ProjectProviderSelectionRow, ProjectBudgetRow, RightsLogRow, VerificationItemRow,
     UsageEventRow, BudgetReservationRow, ModelPricingRow,
 )
 from kdp_pipeline.storage.files import sha256_file
@@ -27,7 +27,7 @@ REQUIRED_TABLES = {
     "projects", "titles", "assets", "jobs", "provenance", "approvals",
     "editorial_findings", "canon_proposals", "audit_events",
     "provider_profiles", "project_provider_selections", "model_pricing",
-    "project_budgets", "budget_reservations", "usage_events",
+    "project_budgets", "budget_reservations", "usage_events", "verification_items", "rights_log",
 }
 REQUIRED_PROMPTS = (
     "planning/positioning-brief-v1.0.md",
@@ -83,6 +83,12 @@ def inspect_title(root: Path, title_id: str) -> dict:
         revision_recommendations = (list(session.scalars(select(RevisionRecommendationRow).where(
             RevisionRecommendationRow.title_id == title_id).order_by(RevisionRecommendationRow.created_at)))
             if "revision_recommendations" in existing_tables else [])
+        verification_items = (list(session.scalars(select(VerificationItemRow).where(
+            VerificationItemRow.title_id == title_id).order_by(VerificationItemRow.created_at)))
+            if "verification_items" in existing_tables else [])
+        rights_records = (list(session.scalars(select(RightsLogRow).where(
+            RightsLogRow.title_id == title_id).order_by(RightsLogRow.created_at)))
+            if "rights_log" in existing_tables else [])
         continuity_audits = list(session.scalars(select(AuditEventRow).where(
             AuditEventRow.action.in_(["continuity.output.validated", "continuity.output.rejected"]))))
         continuity_audits_by_job = {row.entity_id: row for row in continuity_audits}
@@ -356,6 +362,36 @@ def inspect_title(root: Path, title_id: str) -> dict:
                               "finding_ids": json.loads(r.finding_ids_json or "[]"), "status": r.status,
                               "owner": r.owner, "recommendation": r.recommendation}
                               for r in revision_recommendations]},
+            "verification": {
+                "items": [{"verification_id": row.verification_id, "asset_id": row.asset_id,
+                    "kind": row.kind, "locator": row.locator, "exact_text": row.exact_text,
+                    "status": row.status, "proposed_reference": row.proposed_reference,
+                    "source_policy": row.source_policy, "evidence_reference": row.evidence_reference,
+                    "rationale": row.rationale, "reviewer": row.reviewer}
+                    for row in verification_items],
+                "rights_records": [{"rights_record_id": row.rights_record_id, "asset_id": row.asset_id,
+                    "material_type": row.material_type, "description": row.description,
+                    "source": row.source, "provenance_reference": row.provenance_reference,
+                    "legal_basis": row.legal_basis,
+                    "evidence_reference": row.evidence_reference,
+                    "territories": json.loads(row.territories_json or "[]"), "term": row.term,
+                    "restrictions": row.restrictions, "status": row.status,
+                    "rationale": row.rationale, "reviewer": row.reviewer}
+                    for row in rights_records],
+                "release_blockers": ([{"type": "verification", "id": row.verification_id,
+                    "kind": row.kind, "asset_id": row.asset_id, "locator": row.locator,
+                    "status": row.status} for row in verification_items
+                    if row.status not in {"verified", "not_applicable"}] +
+                    [{"type": "rights", "id": row.rights_record_id, "asset_id": row.asset_id,
+                      "material_type": row.material_type, "status": row.status}
+                     for row in rights_records if row.status not in {"cleared", "not_applicable"}] +
+                    [{"type": "approval_condition", "id": approval.approval_id,
+                      "asset_id": approval.asset_id, "condition": condition}
+                     for approval in approvals for condition in json.loads(approval.conditions_json or "[]")]),
+                "legacy_approval_conditions": [{"approval_id": approval.approval_id,
+                    "asset_id": approval.asset_id, "conditions": json.loads(approval.conditions_json or "[]")}
+                    for approval in approvals if json.loads(approval.conditions_json or "[]")],
+            },
             "continuity": {"runs": continuity_runs, "warnings": continuity_warnings,
                            "findings_from_invalid_analysis": [row.finding_id for row in findings if row.asset_id in invalid_continuity_asset_ids and row.pass_type == "continuity"],
                            "proposals_from_invalid_analysis": [row.proposal_id for row in proposals if row.finding_id and any(f.finding_id == row.finding_id and f.asset_id in invalid_continuity_asset_ids for f in findings)]},

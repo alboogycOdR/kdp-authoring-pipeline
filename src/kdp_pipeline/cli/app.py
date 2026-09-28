@@ -16,6 +16,8 @@ from kdp_pipeline.continuity import ContinuityService, approve_canon_proposal
 from kdp_pipeline.editorial import EditorialService
 from kdp_pipeline.editorial import StructuredEditorialService, create_revision_recommendation
 from kdp_pipeline.inspection import doctor as run_doctor, inspect_title
+from kdp_pipeline.verification import (add_verification_flag, decide_rights_record,
+    decide_verification, record_rights, scan_scripture_placeholders)
 from kdp_pipeline.models.planning import PlanningArtifactKind
 from kdp_pipeline.planning import PlanningService, accept_planning_artifact
 from kdp_pipeline.providers.settings import ProviderProfileSettings
@@ -55,6 +57,8 @@ pricing_app = typer.Typer(help="Configure local model pricing")
 budget_app = typer.Typer(help="Configure project generation budgets")
 concept_app = typer.Typer(help="Develop and validate book concepts")
 chapters_app = typer.Typer(help="Queue and inspect bounded chapter work")
+verification_app = typer.Typer(help="Track Scripture, source, and expert verification")
+rights_app = typer.Typer(help="Track rights and licensing review")
 app.add_typer(positioning_app, name="positioning")
 app.add_typer(brief_app, name="brief")
 app.add_typer(outline_app, name="outline")
@@ -69,6 +73,8 @@ app.add_typer(pricing_app, name="pricing")
 app.add_typer(budget_app, name="budget")
 app.add_typer(concept_app, name="concept")
 app.add_typer(chapters_app, name="chapters")
+app.add_typer(verification_app, name="verify")
+app.add_typer(rights_app, name="rights")
 
 
 def _root(root: Path | None) -> Path:
@@ -641,6 +647,76 @@ def editorial_recommend(title_id: str, chapter_number: int, asset_id: str = type
         raise typer.Exit(code=2)
 
 
+@verification_app.command("scan-scripture")
+def verification_scan_scripture(title_id: str, root: Path | None = typer.Option(None)):
+    try:
+        result = scan_scripture_placeholders(_root(root), title_id)
+    except (OSError, ValueError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
+    typer.echo(json.dumps(result))
+
+
+@verification_app.command("add-flag")
+def verification_add_flag(title_id: str, kind: str, locator: str, exact_text: str,
+                          reviewer: str = typer.Option(...), asset_id: str | None = typer.Option(None),
+                          root: Path | None = typer.Option(None)):
+    try:
+        row = add_verification_flag(_root(root), title_id=title_id, kind=kind,
+            locator=locator, exact_text=exact_text, reviewer=reviewer, asset_id=asset_id)
+    except (OSError, ValueError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
+    typer.echo(json.dumps({"verification_id": row.verification_id, "kind": row.kind, "status": row.status}))
+
+
+@verification_app.command("decide")
+def verification_decide(verification_id: str, decision: str, reviewer: str = typer.Option(...),
+                        rationale: str = typer.Option(...), evidence_reference: str | None = typer.Option(None),
+                        reference: str | None = typer.Option(None), source_policy: str | None = typer.Option(None),
+                        root: Path | None = typer.Option(None)):
+    try:
+        row = decide_verification(_root(root), verification_id, decision=decision, reviewer=reviewer,
+            rationale=rationale, evidence_reference=evidence_reference, proposed_reference=reference,
+            source_policy=source_policy)
+    except (OSError, ValueError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
+    typer.echo(json.dumps({"verification_id": row.verification_id, "status": row.status,
+                           "reference": row.proposed_reference}))
+
+
+@rights_app.command("add")
+def rights_add(title_id: str, material_type: str, description: str, reviewer: str = typer.Option(...),
+               asset_id: str | None = typer.Option(None), source: str | None = typer.Option(None),
+               provenance_reference: str | None = typer.Option(None),
+               legal_basis: str | None = typer.Option(None), evidence_reference: str | None = typer.Option(None),
+               territories: list[str] = typer.Option([]), term: str | None = typer.Option(None),
+               restrictions: str | None = typer.Option(None), root: Path | None = typer.Option(None)):
+    try:
+        row = record_rights(_root(root), title_id=title_id, material_type=material_type,
+            description=description, reviewer=reviewer, asset_id=asset_id, source=source,
+            provenance_reference=provenance_reference,
+            legal_basis=legal_basis, evidence_reference=evidence_reference,
+            territories=territories, term=term, restrictions=restrictions)
+    except (OSError, ValueError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
+    typer.echo(json.dumps({"rights_record_id": row.rights_record_id, "status": row.status}))
+
+
+@rights_app.command("decide")
+def rights_decide(rights_record_id: str, decision: str, reviewer: str = typer.Option(...),
+                  rationale: str = typer.Option(...), root: Path | None = typer.Option(None)):
+    try:
+        row = decide_rights_record(_root(root), rights_record_id, decision=decision,
+            reviewer=reviewer, rationale=rationale)
+    except (OSError, ValueError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
+    typer.echo(json.dumps({"rights_record_id": row.rights_record_id, "status": row.status}))
+
+
 @chapter_app.command("revise")
 def chapter_revise(title_id: str, chapter_number: int, asset_id: str = typer.Option(...), root: Path | None = typer.Option(None)):
     try:
@@ -720,6 +796,15 @@ def inspect_concept(title_id: str, root: Path | None = typer.Option(None)):
 def inspect_editorial(title_id: str, root: Path | None = typer.Option(None)):
     try:
         _print_inspection(title_id, _root(root), "editorial")
+    except (OSError, ValueError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
+
+
+@inspect_app.command("verification")
+def inspect_verification(title_id: str, root: Path | None = typer.Option(None)):
+    try:
+        _print_inspection(title_id, _root(root), "verification")
     except (OSError, ValueError) as e:
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(code=2)

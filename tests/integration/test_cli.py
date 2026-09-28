@@ -56,3 +56,18 @@ def test_cli_inspection_and_read_only_doctor(tmp_path: Path):
     assert result.exit_code == 0
     assert json.loads(result.stdout)["title"]["status"] == "IDEA"
     assert (tmp_path / ".kdp" / "state.db").read_bytes() == db_before
+
+
+def test_verification_cli_groups_and_empty_inspection(tmp_path: Path):
+    project_id = runner.invoke(app, ["init-project", "Verification CLI", "--root", str(tmp_path)]).stdout.strip()
+    title_id = runner.invoke(app, ["new-title", project_id, "Verification Title", "--root", str(tmp_path)]).stdout.strip()
+    help_result = runner.invoke(app, ["verify", "--help"])
+    assert help_result.exit_code == 0
+    assert "scan-scripture" in help_result.stdout
+    assert "add-flag" in help_result.stdout
+    rights_help = runner.invoke(app, ["rights", "--help"])
+    assert rights_help.exit_code == 0
+    assert "add" in rights_help.stdout
+    inspection = runner.invoke(app, ["inspect", "verification", title_id, "--root", str(tmp_path)])
+    assert inspection.exit_code == 0
+    assert json.loads(inspection.stdout)["release_blockers"] == []

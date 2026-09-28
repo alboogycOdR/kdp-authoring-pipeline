@@ -169,6 +169,46 @@ class RevisionRecommendationRow(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
+class VerificationItemRow(Base):
+    __tablename__ = "verification_items"
+    __table_args__ = (UniqueConstraint("asset_id", "kind", "locator", "exact_text", name="uq_verification_source_locator"),)
+    verification_id: Mapped[str] = mapped_column(String, primary_key=True)
+    title_id: Mapped[str] = mapped_column(ForeignKey("titles.title_id"), nullable=False)
+    asset_id: Mapped[str | None] = mapped_column(ForeignKey("assets.asset_id"), nullable=True)
+    kind: Mapped[str] = mapped_column(String, nullable=False)
+    locator: Mapped[str] = mapped_column(Text, nullable=False)
+    exact_text: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String, nullable=False, default="pending")
+    proposed_reference: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_policy: Mapped[str | None] = mapped_column(Text, nullable=True)
+    evidence_reference: Mapped[str | None] = mapped_column(Text, nullable=True)
+    rationale: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reviewer: Mapped[str | None] = mapped_column(String, nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class RightsLogRow(Base):
+    __tablename__ = "rights_log"
+    rights_record_id: Mapped[str] = mapped_column(String, primary_key=True)
+    title_id: Mapped[str] = mapped_column(ForeignKey("titles.title_id"), nullable=False)
+    asset_id: Mapped[str | None] = mapped_column(ForeignKey("assets.asset_id"), nullable=True)
+    material_type: Mapped[str] = mapped_column(String, nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    source: Mapped[str | None] = mapped_column(Text, nullable=True)
+    provenance_reference: Mapped[str | None] = mapped_column(Text, nullable=True)
+    legal_basis: Mapped[str | None] = mapped_column(Text, nullable=True)
+    evidence_reference: Mapped[str | None] = mapped_column(Text, nullable=True)
+    territories_json: Mapped[str] = mapped_column(Text, default="[]")
+    term: Mapped[str | None] = mapped_column(Text, nullable=True)
+    restrictions: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String, nullable=False, default="pending")
+    rationale: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reviewer: Mapped[str | None] = mapped_column(String, nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class CanonProposalRow(Base):
     __tablename__ = "canon_proposals"
     proposal_id: Mapped[str] = mapped_column(String, primary_key=True)

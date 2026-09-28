@@ -164,7 +164,7 @@ main{{max-width:1280px;margin:0 auto;padding:2rem 1.25rem 4rem}}h1{{margin:0 0 .
 .badge{{display:inline-block;background:#edf1f4;border-radius:999px;padding:.15rem .6rem;font-size:.8rem}}
 ul{{margin:.3rem 0;padding-left:1.2rem}}li{{overflow-wrap:anywhere}}footer{{margin-top:2rem;border-top:1px solid var(--line);padding-top:1rem;color:var(--muted);font-size:.85rem}}
 </style></head><body><main><h1>KDP Pipeline Operator Workspace</h1>
-<p class=muted>Local read-only status dashboard · Generated {_e(datetime.now(timezone.utc).isoformat())}</p>
+<p class=muted>Local read-only Workspace snapshot · Generated {_e(datetime.now(timezone.utc).isoformat())}</p>
 <p class=notice>This report is read-only. It shows workflow status and review blockers; it does not approve content or publish to KDP.</p>
 {''.join(rendered_projects) if rendered_projects else '<p>No projects found.</p>'}
 <footer>Provider secrets, credentials, raw prompts, and provider response bodies are not included.</footer>

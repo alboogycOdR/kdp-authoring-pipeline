@@ -10,6 +10,7 @@ from sqlalchemy import select
 from kdp_pipeline.core.ids import new_id
 from kdp_pipeline.models.planning import PlanningArtifactKind, spec_for
 from kdp_pipeline.storage.audit import AuditEventWriter
+from kdp_pipeline.storage.approval_conditions import normalize_approval_conditions
 from kdp_pipeline.storage.db import AssetRow, ApprovalRow, ConceptGateRow, ProvenanceRow, ProjectRow, TitleRow, utcnow
 from kdp_pipeline.storage.files import sha256_file
 from kdp_pipeline.storage.service import planning_requirements_met, session_scope
@@ -53,9 +54,11 @@ def accept_planning_artifact(
     *,
     reviewer: str,
     chapter_number: int | None = None,
+    conditions: list[str] | None = None,
 ) -> PlanningAcceptanceResult:
     if not reviewer.strip():
         raise PlanningAcceptanceError("reviewer is required")
+    conditions = normalize_approval_conditions(conditions)
     destination: Path | None = None
     copied = False
     try:
@@ -145,7 +148,7 @@ def accept_planning_artifact(
                 candidate_hash=destination_hash,
                 approver=reviewer,
                 decision="accepted",
-                conditions_json="[]",
+                conditions_json=json.dumps(conditions),
                 created_at=utcnow(),
             )
             accepted_provenance = ProvenanceRow(
@@ -199,6 +202,7 @@ def accept_planning_artifact(
                     "approval_id": approval.approval_id,
                     "reviewer": reviewer,
                     "provenance_id": accepted_provenance.provenance_id,
+                    "conditions": conditions,
                 },
             )
             session.commit()

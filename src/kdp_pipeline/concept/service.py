@@ -14,6 +14,7 @@ from kdp_pipeline.generation import GenerationRunResult, GenerationService
 from kdp_pipeline.prompts import PromptRegistry
 from kdp_pipeline.providers import ModelProvider
 from kdp_pipeline.storage.audit import AuditEventWriter
+from kdp_pipeline.storage.approval_conditions import normalize_approval_conditions
 from kdp_pipeline.storage.db import ApprovalRow, AssetRow, ConceptGateRow, ProvenanceRow, ProjectRow, TitleRow, utcnow
 from kdp_pipeline.storage.files import sha256_file
 from kdp_pipeline.storage.service import session_scope
@@ -230,9 +231,11 @@ def enable_concept_gate(root: Path, title_id: str, enabled: bool, actor_id: str 
         return enabled
 
 
-def accept_concept(root: Path, asset_id: str, reviewer: str) -> ConceptAcceptanceResult:
+def accept_concept(root: Path, asset_id: str, reviewer: str,
+                   conditions: list[str] | None = None) -> ConceptAcceptanceResult:
     if not reviewer.strip():
         raise ValueError("reviewer is required")
+    conditions = normalize_approval_conditions(conditions)
     destination = None
     copied = False
     try:
@@ -265,7 +268,7 @@ def accept_concept(root: Path, asset_id: str, reviewer: str) -> ConceptAcceptanc
                 ai_classification=source.ai_classification, approval_status="accepted", created_at=utcnow())
             approval = ApprovalRow(approval_id=new_id("APR"), title_id=title.title_id, asset_id=accepted.asset_id,
                 scope="concept.brief", candidate_hash=digest, approver=reviewer, decision="accepted",
-                conditions_json="[]", created_at=utcnow())
+                conditions_json=json.dumps(conditions), created_at=utcnow())
             accepted_provenance = ProvenanceRow(provenance_id=new_id("PROV"), asset_id=accepted.asset_id,
                 job_id=None, provider=provenance.provider, model=provenance.model,
                 prompt_template_id=provenance.prompt_template_id, prompt_template_version=provenance.prompt_template_version,
@@ -278,7 +281,7 @@ def accept_concept(root: Path, asset_id: str, reviewer: str) -> ConceptAcceptanc
             AuditEventWriter.append(session, actor_id=reviewer, action="concept.accepted", entity_type="asset",
                 entity_id=accepted.asset_id, correlation_id=title.title_id, result="success", before_hash=source.sha256,
                 after_hash=digest, metadata={"source_asset_id": asset_id, "approval_id": approval.approval_id,
-                                             "provenance_id": accepted_provenance.provenance_id})
+                "provenance_id": accepted_provenance.provenance_id, "conditions": conditions})
             session.commit()
             return ConceptAcceptanceResult(source, accepted, approval, destination)
     except Exception:

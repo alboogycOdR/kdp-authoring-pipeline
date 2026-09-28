@@ -25,7 +25,8 @@ The diagram shows a suggested reading path and navigation branches. It does not 
 
 - [Master Architecture Pack](KDP_PIPELINE_MASTER_ARCHITECTURE_PACK/README.md) — long-term architecture overview and package map.
 - [Architecture Decision Records](KDP_PIPELINE_MASTER_ARCHITECTURE_PACK/07_Architecture_Decision_Records/) and [DECISIONS.md](DECISIONS.md) — accepted decision records and their index.
-- [ROADMAP.md](ROADMAP.md) — completed core roadmap, current milestone, and planned frontend track.
+- [ROADMAP.md](ROADMAP.md) — completed platform milestones through Sprint 16 and future candidates.
+- [v1.0 platform release note](docs/operations/V1_0_PLATFORM_COMPLETE.md) — completed capabilities and operating boundaries.
 - [Detailed v1.0 build specification](docs/architecture/KDP_PIPELINE_SYSTEM_ARCHITECTURE_BUILD_SPEC_v1.0.md) — detailed baseline, subordinate to the pack.
 - [Architecture index](docs/ARCHITECTURE_INDEX.md) — operational guides, sprint reports, pilot reports, and other architecture references.
 - [AI contribution guide](docs/CONTRIBUTING_AI.md) — practical repository workflow for AI contributors.

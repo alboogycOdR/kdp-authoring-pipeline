@@ -14,7 +14,7 @@ Suggested reading order for contributors and AI agents:
 
 For roadmap status and accepted architecture decisions, see [ROADMAP.md](ROADMAP.md) and [DECISIONS.md](DECISIONS.md).
 
-Repository foundation includes:
+The platform is complete through **Sprint 16**. Its current scope includes:
 
 - Python package + CLI
 - SQLite state database
@@ -23,9 +23,11 @@ Repository foundation includes:
 - explicit title state machine
 - append-only audit events
 - basic project/title commands
-- tests for workspace creation and state-transition integrity
+- concept and planning gates, bounded chapter work, editorial and continuity review
+- verification, deterministic Markdown builds, and human-gated release preflight
+- a local Operator Workspace for inspection, actions, and informed review
 
-Current workflow scope is documented in the [Master Architecture Pack](KDP_PIPELINE_MASTER_ARCHITECTURE_PACK/README.md) and its [architecture index](docs/ARCHITECTURE_INDEX.md). Operational guides cover concepts, chapter work, editorial review, verification, builds, release preflight, and the local operator dashboard.
+Current workflow scope is documented in the [Master Architecture Pack](KDP_PIPELINE_MASTER_ARCHITECTURE_PACK/README.md) and its [architecture index](docs/ARCHITECTURE_INDEX.md). See the [v1.0 platform release note](docs/operations/V1_0_PLATFORM_COMPLETE.md) and [Operator Workspace guide](docs/operations/OPERATOR_WORKSPACE.md) for the completed milestone and local workflow.
 
 ## Architecture
 

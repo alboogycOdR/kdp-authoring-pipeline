@@ -16,3 +16,5 @@ The current accepted architectural direction is established by [ADR-0001: System
 - **No secret persistence:** credentials and sensitive KDP account information must not be stored in project artefacts, logs, or AI context.
 
 Only ADR-0001 is currently present in the ADR directory. The bullets above summarize the accepted baseline; they are not separate ADR records. See [ARCHITECTURE.md](ARCHITECTURE.md) for the documentation hierarchy and [docs/ARCHITECTURE_INDEX.md](docs/ARCHITECTURE_INDEX.md) for related references.
+
+These decisions remain the baseline for the platform completed through Sprint 16; the [v1.0 release note](docs/operations/V1_0_PLATFORM_COMPLETE.md) records milestone scope without creating a new architecture decision.

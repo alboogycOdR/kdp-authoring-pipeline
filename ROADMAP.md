@@ -2,7 +2,7 @@
 
 This is a concise status index. Architecture and scope detail belong in the [Master Architecture Pack](KDP_PIPELINE_MASTER_ARCHITECTURE_PACK/README.md) and linked specifications. Future work remains subject to explicit approval and task scope.
 
-## Completed: Sprints 1–13
+## Completed: Sprints 1–16
 
 - **Sprint 1 — Foundation:** repository, SQLite, core models and IDs, project/title workspaces, hashing, audit, and CLI foundation.
 - **Sprint 2 — Providers and prompts:** provider abstraction, prompt registry/versioning, generation jobs, provenance, and context manifests.
@@ -17,21 +17,21 @@ This is a concise status index. Architecture and scope detail belong in the [Mas
 - **Sprint 11 — Build and export:** deterministic Markdown manuscript assembly and hash inspection.
 - **Sprint 12 — Release candidate and preflight:** frozen candidates, checklist, human review, and packet export.
 - **Sprint 13 — Operator workspace:** static, read-only local dashboard.
+- **Sprint 14 — Interactive Workspace foundation:** local inspection server, attention queues, and themes.
+- **Sprint 15 — Workspace actions:** explicit forms for existing audited workflows.
+- **Sprint 16 — Review and approval UX:** artefact context, blockers, conditions, and consequences before human decisions.
 
 See the [v1.0 build specification](docs/architecture/KDP_PIPELINE_SYSTEM_ARCHITECTURE_BUILD_SPEC_v1.0.md), [Sprint 7–13 implementation report](docs/operations/SPRINTS_7_TO_13_FINAL_REPORT.md), and [v0.1 release note](docs/operations/CORE_ROADMAP_V0_1_RELEASE_NOTE.md). The detailed build specification is subordinate to the Master Architecture Pack.
 
 ## Current milestone
 
-**Core roadmap v0.1 complete.** The milestone is represented by `v0.1-core-roadmap-complete`; publication remains human-controlled.
+**Platform v1.0 complete through Sprint 16.** Core roadmap v0.1, v0.2 production rehearsal, and v0.3 backend readiness are complete. See the [v1.0 release note](docs/operations/V1_0_PLATFORM_COMPLETE.md). Publication remains human-controlled.
 
 ## Future roadmap
 
-- **v0.2 — Production Rehearsal Hardening:** current next milestone, informed by the [Pilot 1B rehearsal report](docs/operations/V0_2_PRODUCTION_REHEARSAL_REPORT.md). The report records rehearsal findings; it is not, by itself, approval to implement fixes.
-- **Sprint 14 — Interactive Operator Frontend Foundation.**
-- **Sprint 15 — Frontend Workflow Actions.**
-- **Sprint 16 — Frontend Review & Approval UX.**
+- Future work requires a separately approved scope and must follow the Master Architecture Pack.
 
-See the [Sprint 14–16 frontend specification](specs-frontend/Sprint_14_16_Frontend_Spec.md). These sprints remain planned, not completed.
+See the [Sprint 14–16 frontend specification](specs-frontend/Sprint_14_16_Frontend_Spec.md) and [completion report](docs/operations/SPRINTS_14_TO_16_FRONTEND_REPORT.md) for the completed Workspace track.
 
 ## Potential later milestones
 

@@ -14,7 +14,9 @@ from kdp_pipeline.context import ContextManifest
 from kdp_pipeline.core.hashing import canonical_json_bytes, sha256_bytes
 from kdp_pipeline.core.ids import new_id
 from kdp_pipeline.models.schemas import ProvenanceRecord
-from kdp_pipeline.providers import GenerationRequest, GenerationResult, ModelProvider, RenderedPrompt
+from kdp_pipeline.providers import (
+    GenerationRequest, GenerationResult, ModelProvider, ProviderTransportError, RenderedPrompt,
+)
 from kdp_pipeline.providers.costs import (
     calculate_usage_cost,
     evaluate_and_reserve,
@@ -171,6 +173,12 @@ def _existing_result(root: Path, job: JobRow, *, reused: bool) -> GenerationRunR
 
 def _mark_failed(root: Path, job_id: str, error: BaseException) -> None:
     summary = _redact_environment_secrets(f"{type(error).__name__}: {str(error).strip()}")[:500]
+    transport_outcome_unknown = isinstance(error, ProviderTransportError)
+    cause_name = type(error.__cause__).__name__ if error.__cause__ is not None else ""
+    reason_code = (
+        "provider_transport_timeout" if cause_name.endswith("Timeout")
+        else "provider_transport_failure"
+    ) if transport_outcome_unknown else None
     with session_scope(root) as session:
         job = session.get(JobRow, job_id)
         if job is None:
@@ -178,7 +186,25 @@ def _mark_failed(root: Path, job_id: str, error: BaseException) -> None:
         job.status = "failed"
         job.error = summary
         job.completed_at = utcnow()
-        mark_reservation_uncertain(session, job_id)
+        mark_reservation_uncertain(
+            session, job_id, provider_outcome_unknown=transport_outcome_unknown,
+        )
+        if transport_outcome_unknown:
+            AuditEventWriter.append(
+                session,
+                actor_id="system",
+                action="generation.provider_outcome_unknown",
+                entity_type="job",
+                entity_id=job_id,
+                correlation_id=job_id,
+                result="uncertain",
+                metadata={
+                    "reason": reason_code,
+                    "provider_outcome_unknown": True,
+                    "usage_recorded": False,
+                    "warning": "Provider may have processed or billed the request; local outcome is unknown.",
+                },
+            )
         AuditEventWriter.append(
             session,
             actor_id="system",
@@ -187,7 +213,10 @@ def _mark_failed(root: Path, job_id: str, error: BaseException) -> None:
             entity_id=job_id,
             correlation_id=job_id,
             result="failed",
-            metadata={"error": summary},
+            metadata={"error": summary, **({"reason": reason_code,
+                                             "provider_outcome_unknown": True,
+                                             "usage_recorded": False}
+                                            if transport_outcome_unknown else {})},
         )
         session.commit()
 

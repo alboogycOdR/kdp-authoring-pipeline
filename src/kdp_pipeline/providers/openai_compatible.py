@@ -9,7 +9,7 @@ from typing import Literal
 from urllib.parse import urlparse
 
 import httpx
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from kdp_pipeline.providers.contracts import GenerationRequest, GenerationResult, UsageMetadata
 
@@ -52,7 +52,21 @@ class OpenAICompatibleConfig(BaseModel):
     model: str = Field(min_length=1)
     api_key_env: str | None = Field(default="OPENAI_API_KEY", min_length=1)
     timeout_seconds: float = Field(default=60.0, gt=0)
+    connect_timeout_seconds: float = Field(default=60.0, gt=0)
+    read_timeout_seconds: float = Field(default=60.0, gt=0)
+    write_timeout_seconds: float = Field(default=60.0, gt=0)
+    pool_timeout_seconds: float = Field(default=60.0, gt=0)
     reasoning_effort: Literal["minimal", "low"] | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def expand_legacy_timeout(cls, value):
+        if isinstance(value, dict) and "timeout_seconds" in value:
+            legacy_timeout = value["timeout_seconds"]
+            for name in ("connect_timeout_seconds", "read_timeout_seconds",
+                         "write_timeout_seconds", "pool_timeout_seconds"):
+                value.setdefault(name, legacy_timeout)
+        return value
 
     @field_validator("base_url")
     @classmethod
@@ -168,7 +182,12 @@ class OpenAICompatibleProvider:
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
         owned_client = self._client is None
-        client = self._client or httpx.AsyncClient(timeout=self.config.timeout_seconds)
+        client = self._client or httpx.AsyncClient(timeout=httpx.Timeout(
+            connect=self.config.connect_timeout_seconds,
+            read=self.config.read_timeout_seconds,
+            write=self.config.write_timeout_seconds,
+            pool=self.config.pool_timeout_seconds,
+        ))
         started = time.perf_counter()
         try:
             try:

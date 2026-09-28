@@ -89,7 +89,11 @@ def inspect_title(root: Path, title_id: str) -> dict:
         month = datetime.now(timezone.utc).strftime("%Y-%m")
         monthly_usage = [row for row in usage_rows if row.created_at.strftime("%Y-%m") == month]
         spent = sum(row.estimated_cost or 0.0 for row in monthly_usage if row.currency == "USD")
-        reserved = sum(row.estimated_cost_usd or 0.0 for row in reservations if row.month == month and row.status in {"reserved", "uncertain", "unpriced"})
+        reserved = sum(row.estimated_cost_usd or 0.0 for row in reservations if row.month == month and row.status in {"reserved", "uncertain", "unpriced", "provider_outcome_unknown"})
+        reservations_by_job = {row.job_id: row for row in reservations}
+        unknown_outcomes = [row for row in reservations
+                            if row.month == month and row.status == "provider_outcome_unknown"
+                            and any(job.job_id == row.job_id for job in jobs)]
         usage_groups: dict[tuple[str, str], dict] = {}
         for row in usage_rows:
             group = usage_groups.setdefault((row.provider, row.model), {
@@ -104,10 +108,14 @@ def inspect_title(root: Path, title_id: str) -> dict:
             group["unknown_cost_events"] += int(row.source == "unknown" or
                                                  (row.estimated_cost is not None and row.currency != "USD"))
         budget_warning = None
+        if unknown_outcomes:
+            budget_warning = (
+                "Provider outcome unknown for one or more failed runs; provider may have processed or billed them"
+            )
         if budget and budget.monthly_limit_usd is not None:
             projected = spent + reserved
             if projected >= budget.monthly_limit_usd * budget.warning_percent / 100:
-                budget_warning = f"Monthly budget warning threshold ({budget.warning_percent}%) reached"
+                budget_warning = (budget_warning + "; " if budget_warning else "") + f"Monthly budget warning threshold ({budget.warning_percent}%) reached"
         if any(row.source == "unknown" or (row.estimated_cost is not None and row.currency != "USD")
                for row in monthly_usage):
             budget_warning = (budget_warning + "; " if budget_warning else "") + "Some usage has unknown cost or non-USD currency"
@@ -143,7 +151,21 @@ def inspect_title(root: Path, title_id: str) -> dict:
             "assets": [{"asset_id": asset.asset_id, "asset_type": asset.asset_type, "path": asset.path, "sha256": asset.sha256, "approval_status": asset.approval_status, "source_ref": asset.source_ref} for asset in assets],
             "jobs": [{"job_id": job.job_id, "job_type": job.job_type, "status": job.status,
                       "error": job.error, "idempotency_key": job.idempotency_key,
+                      "failure_category": ("provider_transport_timeout"
+                                           if job.error and "ReadTimeout" in job.error
+                                           else "provider_transport_failure"
+                                           if job.error and "ProviderTransportError" in job.error else None),
                       "usage_event_id": next((event.usage_event_id for event in usage_rows if event.job_id == job.job_id), None),
+                      "usage_recorded": any(event.job_id == job.job_id for event in usage_rows),
+                      "reservation_status": (reservations_by_job[job.job_id].status
+                                             if job.job_id in reservations_by_job else None),
+                      "provider_outcome_unknown": (reservations_by_job.get(job.job_id).status == "provider_outcome_unknown"
+                                                   if reservations_by_job.get(job.job_id) else False),
+                      "provider_billing_warning": (
+                          "Provider may have processed or billed the request; local outcome is unknown"
+                          if reservations_by_job.get(job.job_id)
+                          and reservations_by_job[job.job_id].status == "provider_outcome_unknown" else None
+                      ),
                       "usage_diagnostics": next((json.loads(event.cost_details_json or "{}").get("response_diagnostics")
                                                   for event in usage_rows if event.job_id == job.job_id
                                                   and json.loads(event.cost_details_json or "{}").get("response_diagnostics")), None)}
@@ -176,8 +198,17 @@ def inspect_title(root: Path, title_id: str) -> dict:
                         "unknown_cost_events": sum(row.source == "unknown" or
                                                     (row.estimated_cost is not None and row.currency != "USD")
                                                     for row in monthly_usage),
+                        "provider_outcome_unknown_runs": sum(row.status == "provider_outcome_unknown"
+                                                              and row.month == month for row in reservations),
                         "warning": budget_warning}
-                       if budget else {"configured": False}),
+                       if budget else {
+                           "configured": False,
+                           "provider_outcome_unknown_runs": sum(
+                               row.status == "provider_outcome_unknown" and row.month == month
+                               for row in reservations
+                           ),
+                           "warning": budget_warning,
+                       }),
             "approvals": [{"approval_id": row.approval_id, "asset_id": row.asset_id, "scope": row.scope, "decision": row.decision, "approver": row.approver} for row in approvals],
             "findings": [{"finding_id": row.finding_id, "asset_id": row.asset_id, "pass_type": row.pass_type, "status": row.status, "snapshot_path": row.snapshot_path} for row in findings],
             "proposals": [{"proposal_id": row.proposal_id, "finding_id": row.finding_id, "status": row.status, "snapshot_path": row.snapshot_path} for row in proposals],

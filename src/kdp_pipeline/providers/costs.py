@@ -63,7 +63,7 @@ def evaluate_and_reserve(session, *, project_id: str, job_id: str, pricing: Mode
                 if row.created_at.strftime("%Y-%m") == month and row.currency == "USD")
     reservation_rows = session.scalars(select(BudgetReservationRow).where(
         BudgetReservationRow.project_id == project_id,
-        BudgetReservationRow.status.in_(("reserved", "uncertain", "unpriced")),
+        BudgetReservationRow.status.in_(("reserved", "uncertain", "unpriced", "provider_outcome_unknown")),
     )).all()
     reserved = sum(row.estimated_cost_usd or 0.0 for row in reservation_rows if row.month == month)
     projected = spent + reserved + (estimate or 0.0)
@@ -156,11 +156,18 @@ def settle_reservation(session, job_id: str, cost: float | None) -> None:
     reservation.settled_at = utcnow()
 
 
-def mark_reservation_uncertain(session, job_id: str) -> None:
+def mark_reservation_uncertain(session, job_id: str, *, provider_outcome_unknown: bool = False) -> None:
     reservation = session.scalar(select(BudgetReservationRow).where(
         BudgetReservationRow.job_id == job_id
     ))
-    if reservation is not None and reservation.status == "reserved":
+    if reservation is None:
+        return
+    if provider_outcome_unknown and reservation.status in {
+        "reserved", "uncertain", "unpriced", "provider_outcome_unknown",
+    }:
+        reservation.status = "provider_outcome_unknown"
+        reservation.settled_at = utcnow()
+    elif reservation.status == "reserved":
         reservation.status = "uncertain"
 
 
@@ -273,23 +280,33 @@ def project_budget_report(root, project_id: str, *, now: datetime | None = None)
     month = current_month(now)
     with session_scope(root) as session:
         budget = session.get(ProjectBudgetRow, project_id)
+        unresolved_outcomes = session.scalars(select(BudgetReservationRow).where(
+            BudgetReservationRow.project_id == project_id,
+            BudgetReservationRow.month == month,
+            BudgetReservationRow.status == "provider_outcome_unknown",
+        )).all()
         if budget is None:
             return {"project_id": project_id, "configured": False, "month": month,
                     "spent_usd": 0.0, "reserved_usd": 0.0, "unknown_cost_events": 0,
-                    "warning": None}
+                    "provider_outcome_unknown_runs": len(unresolved_outcomes),
+                    "warning": ("Provider outcome unknown for one or more failed runs; provider may have processed or billed them"
+                                if unresolved_outcomes else None)}
         events = session.scalars(select(UsageEventRow).where(UsageEventRow.project_id == project_id)).all()
         monthly = [event for event in events if event.created_at.strftime("%Y-%m") == month]
         spent = sum(event.estimated_cost or 0.0 for event in monthly if event.currency == "USD")
         reservations = session.scalars(select(BudgetReservationRow).where(
             BudgetReservationRow.project_id == project_id,
             BudgetReservationRow.month == month,
-            BudgetReservationRow.status.in_(("reserved", "uncertain", "unpriced")),
+            BudgetReservationRow.status.in_(("reserved", "uncertain", "unpriced", "provider_outcome_unknown")),
         )).all()
         reserved = sum(row.estimated_cost_usd or 0.0 for row in reservations)
         total = spent + reserved
         warning = None
+        unknown_outcomes = sum(row.status == "provider_outcome_unknown" for row in reservations)
+        if unknown_outcomes:
+            warning = "Provider outcome unknown for one or more failed runs; provider may have processed or billed them"
         if budget.monthly_limit_usd is not None and total >= budget.monthly_limit_usd * budget.warning_percent / 100:
-            warning = f"Monthly budget warning threshold ({budget.warning_percent}%) reached"
+            warning = (warning + "; " if warning else "") + f"Monthly budget warning threshold ({budget.warning_percent}%) reached"
         if any(event.source == "unknown" or (event.estimated_cost is not None and event.currency != "USD") for event in monthly):
             warning = (warning + "; " if warning else "") + "Some generation usage is unpriced"
         return {"project_id": project_id, "configured": True, "month": month,
@@ -303,6 +320,7 @@ def project_budget_report(root, project_id: str, *, now: datetime | None = None)
                                            (event.estimated_cost is not None and event.currency != "USD")
                                            for event in monthly),
                 "warning": warning,
+                "provider_outcome_unknown_runs": unknown_outcomes,
                 "reservations": [{"reservation_id": row.reservation_id, "job_id": row.job_id,
                                   "estimated_cost_usd": row.estimated_cost_usd,
                                   "status": row.status} for row in reservations]}

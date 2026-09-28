@@ -19,7 +19,7 @@ from kdp_pipeline.providers.configuration import (
 )
 from kdp_pipeline.providers.costs import set_model_pricing, set_project_budget
 from kdp_pipeline.providers.settings import ProviderProfileSettings
-from kdp_pipeline.storage.db import BudgetReservationRow, ProviderProfileRow, UsageEventRow
+from kdp_pipeline.storage.db import AuditEventRow, BudgetReservationRow, ProviderProfileRow, UsageEventRow
 from kdp_pipeline.storage.service import create_project, create_title, session_scope
 
 
@@ -64,11 +64,15 @@ def test_provider_profile_persists_and_resolves_reasoning_effort(tmp_path, monke
         provider_id="gpt5-low", provider_type="openai-compatible", display_name="GPT-5 low",
         model="gpt-5", base_url="https://api.openai.com/v1", api_key_env="PILOT_OPENAI_KEY",
         reasoning_effort="low",
+        connect_timeout_seconds=12, read_timeout_seconds=180,
+        write_timeout_seconds=25, pool_timeout_seconds=7,
     ))
     assert added["reasoning_effort"] == "low"
     select_provider_for_project(tmp_path, project.project_id, "gpt5-low")
     provider = resolve_project_provider(tmp_path, project.project_id)
     assert provider.config.reasoning_effort == "low"
+    assert (provider.config.connect_timeout_seconds, provider.config.read_timeout_seconds,
+            provider.config.write_timeout_seconds, provider.config.pool_timeout_seconds) == (12, 180, 25, 7)
     assert provider.config_hash
 
 
@@ -78,12 +82,46 @@ def test_reasoning_effort_cli_accepts_known_value_and_rejects_unknown(tmp_path):
                                 "--reasoning-effort", "low", "--root", str(tmp_path)])
     assert valid.exit_code == 0, valid.output
     assert json.loads(valid.output)["reasoning_effort"] == "low"
+    assert json.loads(valid.output)["read_timeout_seconds"] == 60.0
     for invalid_effort in ("xhigh", "medium", "high"):
         invalid = runner.invoke(app, ["providers", "add-openai-compatible", f"gpt5-bad-{invalid_effort}",
                                       "GPT-5 bad", "gpt-5", "--reasoning-effort", invalid_effort,
                                       "--root", str(tmp_path)])
         assert invalid.exit_code == 2
         assert "reasoning_effort" in invalid.output
+
+
+def test_provider_timeout_cli_accepts_positive_and_rejects_nonpositive(tmp_path):
+    runner = CliRunner()
+    valid = runner.invoke(app, ["providers", "add-openai-compatible", "long-read", "Long read", "gpt-5",
+                                "--read-timeout-seconds", "180", "--root", str(tmp_path)])
+    assert valid.exit_code == 0, valid.output
+    assert json.loads(valid.output)["read_timeout_seconds"] == 180.0
+    invalid = runner.invoke(app, ["providers", "add-openai-compatible", "bad-timeout", "Bad timeout", "gpt-5",
+                                  "--read-timeout-seconds", "0", "--root", str(tmp_path)])
+    assert invalid.exit_code == 2
+
+    updated = runner.invoke(app, ["providers", "set-timeouts", "long-read",
+                                  "--read-timeout-seconds", "240", "--root", str(tmp_path)])
+    assert updated.exit_code == 0, updated.output
+    updated_profile = json.loads(updated.output)
+    assert updated_profile["read_timeout_seconds"] == 240.0
+    assert updated_profile["connect_timeout_seconds"] == 60.0
+    with session_scope(tmp_path) as session:
+        assert session.scalar(select(AuditEventRow).where(
+            AuditEventRow.entity_id == "long-read",
+            AuditEventRow.action == "provider.profile.timeouts_updated",
+        )) is not None
+
+
+def test_provider_profile_timeout_values_default_for_existing_profiles(tmp_path):
+    settings = ProviderProfileSettings(
+        provider_id="legacy-timeouts", provider_type="openai-compatible", display_name="Legacy",
+        model="gpt-5", api_key_env="TEST_KEY",
+    )
+    saved = add_provider_profile(tmp_path, settings)
+    assert [saved[name] for name in ("connect_timeout_seconds", "read_timeout_seconds",
+                                     "write_timeout_seconds", "pool_timeout_seconds")] == [60.0] * 4
 
 
 def test_init_db_adds_reasoning_column_to_existing_workspace(tmp_path):
@@ -93,12 +131,15 @@ def test_init_db_adds_reasoning_column_to_existing_workspace(tmp_path):
     try:
         with engine.begin() as connection:
             connection.exec_driver_sql("ALTER TABLE provider_profiles DROP COLUMN reasoning_effort")
+            for name in ("connect_timeout_seconds", "read_timeout_seconds", "write_timeout_seconds", "pool_timeout_seconds"):
+                connection.exec_driver_sql(f"ALTER TABLE provider_profiles DROP COLUMN {name}")
     finally:
         engine.dispose()
     init_db(tmp_path)
     with session_scope(tmp_path) as session:
         columns = {column["name"] for column in inspect(session.bind).get_columns("provider_profiles")}
     assert "reasoning_effort" in columns
+    assert {"connect_timeout_seconds", "read_timeout_seconds", "write_timeout_seconds", "pool_timeout_seconds"} <= columns
 
 
 def test_generation_without_project_selection_fails_without_fake_fallback(tmp_path):

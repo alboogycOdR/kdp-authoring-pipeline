@@ -184,6 +184,10 @@ class ProviderProfileRow(Base):
     default_max_output_tokens: Mapped[int] = mapped_column(Integer, default=1200, nullable=False)
     default_temperature: Mapped[float | None] = mapped_column(Float, nullable=True)
     reasoning_effort: Mapped[str | None] = mapped_column(String, nullable=True)
+    connect_timeout_seconds: Mapped[float] = mapped_column(Float, default=60.0, nullable=False)
+    read_timeout_seconds: Mapped[float] = mapped_column(Float, default=60.0, nullable=False)
+    write_timeout_seconds: Mapped[float] = mapped_column(Float, default=60.0, nullable=False)
+    pool_timeout_seconds: Mapped[float] = mapped_column(Float, default=60.0, nullable=False)
     priority: Mapped[int | None] = mapped_column(Integer, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     metadata_json: Mapped[str] = mapped_column(Text, default="{}", nullable=False)
@@ -270,11 +274,22 @@ def init_db(root: Path) -> None:
     engine = engine_for(root)
     try:
         Base.metadata.create_all(engine)
-        # Additive migration for workspaces created before reasoning controls.
+        # Additive migrations for workspaces created before provider controls.
         columns = {column["name"] for column in sqlalchemy_inspect(engine).get_columns("provider_profiles")}
-        if "reasoning_effort" not in columns:
+        additions = {
+            "reasoning_effort": "VARCHAR",
+            "connect_timeout_seconds": "FLOAT NOT NULL DEFAULT 60.0",
+            "read_timeout_seconds": "FLOAT NOT NULL DEFAULT 60.0",
+            "write_timeout_seconds": "FLOAT NOT NULL DEFAULT 60.0",
+            "pool_timeout_seconds": "FLOAT NOT NULL DEFAULT 60.0",
+        }
+        missing = [(name, declaration) for name, declaration in additions.items() if name not in columns]
+        if missing:
             with engine.begin() as connection:
-                connection.execute(text("ALTER TABLE provider_profiles ADD COLUMN reasoning_effort VARCHAR"))
+                for name, declaration in missing:
+                    connection.execute(text(
+                        f"ALTER TABLE provider_profiles ADD COLUMN {name} {declaration}"
+                    ))
     finally:
         engine.dispose()
 

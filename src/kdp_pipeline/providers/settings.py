@@ -23,6 +23,10 @@ class ProviderProfileSettings(BaseModel):
     default_max_output_tokens: int = Field(default=1200, gt=0)
     default_temperature: float | None = Field(default=0.0, ge=0, le=2)
     reasoning_effort: Literal["minimal", "low"] | None = None
+    connect_timeout_seconds: float = Field(default=60.0, gt=0)
+    read_timeout_seconds: float = Field(default=60.0, gt=0)
+    write_timeout_seconds: float = Field(default=60.0, gt=0)
+    pool_timeout_seconds: float = Field(default=60.0, gt=0)
     priority: int | None = None
     notes: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)

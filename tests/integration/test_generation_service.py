@@ -2,6 +2,7 @@ import asyncio
 import json
 from pathlib import Path
 
+import httpx
 import pytest
 from sqlalchemy import func, select
 
@@ -10,7 +11,12 @@ from kdp_pipeline.core.hashing import sha256_text
 from kdp_pipeline.generation import GenerationService
 from kdp_pipeline.generation.service import GenerationServiceError
 from kdp_pipeline.inspection.service import inspect_title
-from kdp_pipeline.providers import FakeProvider, GenerationRequest, GenerationResult, RenderedPrompt
+from kdp_pipeline.providers import (
+    FakeProvider, GenerationRequest, GenerationResult, ProviderTransportError, RenderedPrompt,
+)
+from kdp_pipeline.providers.configuration import add_provider_profile
+from kdp_pipeline.providers.costs import project_budget_report, set_model_pricing
+from kdp_pipeline.providers.settings import ProviderProfileSettings
 from kdp_pipeline.storage.db import (
     AssetRow, AuditEventRow, BudgetReservationRow, JobRow, ProvenanceRow, UsageEventRow,
 )
@@ -161,6 +167,68 @@ def test_provider_failure_marks_job_failed_without_asset_or_provenance(tmp_path:
         assert session.scalar(select(func.count(ProvenanceRow.provenance_id))) == 0
     assert not list((tmp_path / "projects" / next(iter([p.name for p in (tmp_path / "projects").iterdir()])) / "titles" / title.title_id / "05_drafts" / "experimental").glob("*.md"))
     assert "generation.failed" in [event.action for event in list_audit(tmp_path, job.job_id)]
+
+
+@pytest.mark.parametrize("priced", [False, True], ids=["unpriced", "reserved"])
+def test_provider_timeout_marks_outcome_unknown_without_inventing_usage_or_assets(tmp_path: Path, priced: bool):
+    project, title = setup_title(tmp_path)
+    set_project_budget(tmp_path, project.project_id, monthly_limit_usd=10,
+                       max_run_estimated_cost_usd=None, warning_percent=80, hard_stop=False)
+    if priced:
+        add_provider_profile(tmp_path, ProviderProfileSettings(
+            provider_id="timeout-profile", provider_type="fake", display_name="Timeout fake", model="fake-v1",
+        ))
+        set_model_pricing(tmp_path, "timeout-profile", "fake-v1", input_usd_per_million=1,
+                          output_usd_per_million=2)
+
+    class TimeoutProvider:
+        provider_name = "fake-timeout"
+        model_name = "fake-v1"
+        profile_id = "timeout-profile" if priced else None
+
+        async def generate(self, request):
+            try:
+                raise httpx.ReadTimeout("mock provider read timeout")
+            except httpx.ReadTimeout as exc:
+                raise ProviderTransportError(
+                    "OpenAI-compatible provider transport failure: ReadTimeout"
+                ) from exc
+
+    with pytest.raises(ProviderTransportError, match="ReadTimeout"):
+        run_generation(tmp_path, title.title_id, TimeoutProvider())
+
+    with session_scope(tmp_path) as session:
+        job = session.scalar(select(JobRow).where(JobRow.title_id == title.title_id))
+        reservation = session.scalar(select(BudgetReservationRow).where(BudgetReservationRow.job_id == job.job_id))
+        assert job.status == "failed"
+        assert "ReadTimeout" in job.error
+        assert reservation.status == "provider_outcome_unknown"
+        assert reservation.settled_at is not None
+        if priced:
+            assert reservation.estimated_cost_usd is not None
+        else:
+            assert reservation.estimated_cost_usd is None
+        assert session.scalar(select(func.count(UsageEventRow.usage_event_id))) == 0
+        assert session.scalar(select(func.count(AssetRow.asset_id))) == 0
+        assert session.scalar(select(func.count(ProvenanceRow.provenance_id))) == 0
+        events = list(session.scalars(select(AuditEventRow).where(AuditEventRow.entity_id == job.job_id)))
+        unknown_event = next(event for event in events if event.action == "generation.provider_outcome_unknown")
+        metadata = json.loads(unknown_event.metadata_json)
+        assert metadata["reason"] == "provider_transport_timeout"
+        assert metadata["provider_outcome_unknown"] is True
+        assert metadata["usage_recorded"] is False
+
+    report = inspect_title(tmp_path, title.title_id)
+    job_report = next(item for item in report["jobs"] if item["job_id"] == job.job_id)
+    assert job_report["failure_category"] == "provider_transport_timeout"
+    assert job_report["usage_recorded"] is False
+    assert job_report["usage_event_id"] is None
+    assert job_report["reservation_status"] == "provider_outcome_unknown"
+    assert job_report["provider_outcome_unknown"] is True
+    assert "may have processed or billed" in job_report["provider_billing_warning"]
+    assert report["budget"]["provider_outcome_unknown_runs"] == 1
+    assert "provider may have processed or billed" in report["budget"]["warning"]
+    assert project_budget_report(tmp_path, project.project_id)["provider_outcome_unknown_runs"] == 1
 
 
 @pytest.mark.parametrize("output", ["", " \t\r\n "])

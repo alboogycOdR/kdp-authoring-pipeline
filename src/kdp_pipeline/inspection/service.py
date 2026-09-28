@@ -88,6 +88,14 @@ def inspect_title(root: Path, title_id: str) -> dict:
             AuditEventRow.correlation_id.in_([title_id, title.project_id]),
             AuditEventRow.entity_id.in_(related_entity_ids),
         )).order_by(AuditEventRow.timestamp_utc.desc()).limit(25)))
+        request_events = list(session.scalars(select(AuditEventRow).where(
+            AuditEventRow.action == "generation.job.created",
+            AuditEventRow.entity_id.in_([row.job_id for row in jobs]),
+        )))
+        request_diagnostics_by_job = {
+            row.entity_id: json.loads(row.metadata_json or "{}").get("effective_request")
+            for row in request_events
+        }
         budget = session.get(ProjectBudgetRow, title.project_id)
         reservations = list(session.scalars(select(BudgetReservationRow).where(BudgetReservationRow.project_id == title.project_id)))
         month = datetime.now(timezone.utc).strftime("%Y-%m")
@@ -187,6 +195,7 @@ def inspect_title(root: Path, title_id: str) -> dict:
             "assets": [{"asset_id": asset.asset_id, "asset_type": asset.asset_type, "path": asset.path, "sha256": asset.sha256, "approval_status": asset.approval_status, "source_ref": asset.source_ref} for asset in assets],
             "jobs": [{"job_id": job.job_id, "job_type": job.job_type, "status": job.status,
                       "error": job.error, "idempotency_key": job.idempotency_key,
+                      "request_diagnostics": request_diagnostics_by_job.get(job.job_id),
                       "failure_category": ("provider_transport_timeout"
                                            if job.error and "ReadTimeout" in job.error
                                            else "provider_transport_failure"

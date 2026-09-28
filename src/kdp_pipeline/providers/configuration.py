@@ -39,6 +39,10 @@ def _profile_dict(row: ProviderProfileRow, selected_for: list[str]) -> dict:
         "default_max_output_tokens": row.default_max_output_tokens,
         "default_temperature": row.default_temperature,
         "reasoning_effort": row.reasoning_effort,
+        "connect_timeout_seconds": row.connect_timeout_seconds,
+        "read_timeout_seconds": row.read_timeout_seconds,
+        "write_timeout_seconds": row.write_timeout_seconds,
+        "pool_timeout_seconds": row.pool_timeout_seconds,
         "priority": row.priority,
         "notes": row.notes,
         "metadata": json.loads(row.metadata_json or "{}"),
@@ -106,6 +110,10 @@ def add_provider_profile(root: Path, settings: ProviderProfileSettings) -> dict:
             default_max_output_tokens=settings.default_max_output_tokens,
             default_temperature=settings.default_temperature,
             reasoning_effort=settings.reasoning_effort,
+            connect_timeout_seconds=settings.connect_timeout_seconds,
+            read_timeout_seconds=settings.read_timeout_seconds,
+            write_timeout_seconds=settings.write_timeout_seconds,
+            pool_timeout_seconds=settings.pool_timeout_seconds,
             priority=settings.priority,
             notes=settings.notes,
             metadata_json=json.dumps(settings.metadata, ensure_ascii=False, sort_keys=True),
@@ -139,6 +147,49 @@ def set_provider_enabled(root: Path, provider_id: str, enabled: bool) -> dict:
             entity_type="provider_profile", entity_id=provider_id,
             correlation_id=provider_id, result="success",
             metadata={"before": before, "after": enabled},
+        )
+        session.commit()
+    return show_provider_profile(root, provider_id)
+
+
+def set_provider_timeouts(
+    root: Path,
+    provider_id: str,
+    *,
+    connect_timeout_seconds: float | None = None,
+    read_timeout_seconds: float | None = None,
+    write_timeout_seconds: float | None = None,
+    pool_timeout_seconds: float | None = None,
+) -> dict:
+    import math
+
+    updates = {
+        "connect_timeout_seconds": connect_timeout_seconds,
+        "read_timeout_seconds": read_timeout_seconds,
+        "write_timeout_seconds": write_timeout_seconds,
+        "pool_timeout_seconds": pool_timeout_seconds,
+    }
+    updates = {name: value for name, value in updates.items() if value is not None}
+    if not updates:
+        raise ValueError("Specify at least one timeout value")
+    if any(not math.isfinite(float(value)) or value <= 0 for value in updates.values()):
+        raise ValueError("Provider timeout values must be finite and greater than zero")
+
+    with session_scope(root) as session:
+        row = session.get(ProviderProfileRow, provider_id)
+        if row is None:
+            raise ValueError(f"Unknown provider profile: {provider_id}")
+        if row.provider_type != "openai-compatible":
+            raise ValueError("Timeout settings apply only to openai-compatible profiles")
+        before = {name: getattr(row, name) for name in updates}
+        for name, value in updates.items():
+            setattr(row, name, float(value))
+        row.updated_at = utcnow()
+        AuditEventWriter.append(
+            session, actor_id="operator", action="provider.profile.timeouts_updated",
+            entity_type="provider_profile", entity_id=provider_id,
+            correlation_id=provider_id, result="success",
+            metadata={"before": before, "after": updates},
         )
         session.commit()
     return show_provider_profile(root, provider_id)
@@ -182,6 +233,10 @@ def resolve_project_provider(root: Path, project_id: str):
             enabled=row.enabled, base_url=row.base_url, model=row.model, api_key_env=row.api_key_env,
             default_max_output_tokens=row.default_max_output_tokens,
             default_temperature=row.default_temperature, reasoning_effort=row.reasoning_effort,
+            connect_timeout_seconds=row.connect_timeout_seconds,
+            read_timeout_seconds=row.read_timeout_seconds,
+            write_timeout_seconds=row.write_timeout_seconds,
+            pool_timeout_seconds=row.pool_timeout_seconds,
             priority=row.priority,
             notes=row.notes, metadata=json.loads(row.metadata_json or "{}"),
         )
@@ -195,6 +250,10 @@ def resolve_project_provider(root: Path, project_id: str):
             model=config.model,
             api_key_env=config.api_key_env or "OPENAI_API_KEY",
             reasoning_effort=config.reasoning_effort,
+            connect_timeout_seconds=config.connect_timeout_seconds,
+            read_timeout_seconds=config.read_timeout_seconds,
+            write_timeout_seconds=config.write_timeout_seconds,
+            pool_timeout_seconds=config.pool_timeout_seconds,
         ))
     provider.profile_id = config.provider_id
     provider.config_hash = sha256_bytes(canonical_json_bytes({
@@ -205,6 +264,10 @@ def resolve_project_provider(root: Path, project_id: str):
         "default_max_output_tokens": config.default_max_output_tokens,
         "default_temperature": config.default_temperature,
         "reasoning_effort": config.reasoning_effort,
+        "connect_timeout_seconds": config.connect_timeout_seconds,
+        "read_timeout_seconds": config.read_timeout_seconds,
+        "write_timeout_seconds": config.write_timeout_seconds,
+        "pool_timeout_seconds": config.pool_timeout_seconds,
     }))
     provider.default_max_output_tokens = config.default_max_output_tokens
     provider.default_temperature = (

@@ -43,6 +43,11 @@ def run(coro):
 def test_config_defaults_and_from_env(monkeypatch):
     config = OpenAICompatibleConfig(model="test-model")
     assert config.base_url == "https://api.openai.com/v1"
+    assert (config.connect_timeout_seconds, config.read_timeout_seconds,
+            config.write_timeout_seconds, config.pool_timeout_seconds) == (60.0, 60.0, 60.0, 60.0)
+    legacy_timeout = OpenAICompatibleConfig(model="test-model", timeout_seconds=30)
+    assert (legacy_timeout.connect_timeout_seconds, legacy_timeout.read_timeout_seconds,
+            legacy_timeout.write_timeout_seconds, legacy_timeout.pool_timeout_seconds) == (30.0,) * 4
 
     monkeypatch.setenv("OPENAI_API_KEY", "test-secret")
     monkeypatch.setenv("OPENAI_BASE_URL", "https://local.example/v1/")
@@ -58,6 +63,30 @@ def test_config_defaults_and_from_env(monkeypatch):
 
     with pytest.raises(ValidationError):
         OpenAICompatibleConfig(model="test-model", base_url="not-a-url")
+
+
+def test_adapter_builds_explicit_httpx_timeout(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-secret")
+    captured = {}
+    original_client = httpx.AsyncClient
+
+    async def handler(request):
+        return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]})
+
+    def client_factory(*, timeout):
+        captured["timeout"] = timeout
+        return original_client(transport=httpx.MockTransport(handler), timeout=timeout)
+
+    monkeypatch.setattr("kdp_pipeline.providers.openai_compatible.httpx.AsyncClient", client_factory)
+    provider = OpenAICompatibleProvider(OpenAICompatibleConfig(
+        model="test-model", connect_timeout_seconds=8, read_timeout_seconds=180,
+        write_timeout_seconds=25, pool_timeout_seconds=6,
+    ))
+    result = run(provider.generate(make_request()))
+    timeout = captured["timeout"]
+    assert isinstance(timeout, httpx.Timeout)
+    assert (timeout.connect, timeout.read, timeout.write, timeout.pool) == (8, 180, 25, 6)
+    assert result.text == "ok"
 
 
 def test_successful_request_and_response_mapping(monkeypatch):

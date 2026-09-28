@@ -17,7 +17,7 @@ from kdp_pipeline.planning import PlanningService, accept_planning_artifact
 from kdp_pipeline.providers.settings import ProviderProfileSettings
 from kdp_pipeline.providers.configuration import (
     add_provider_profile, check_provider_profile, list_provider_profiles,
-    select_provider_for_project, set_provider_enabled, show_provider_profile,
+    select_provider_for_project, set_provider_enabled, set_provider_timeouts, show_provider_profile,
 )
 from kdp_pipeline.providers.costs import (
     list_model_pricing, project_budget_report, set_model_pricing, set_project_budget,
@@ -308,6 +308,10 @@ def providers_add_openai_compatible(
     max_output_tokens: int = typer.Option(1200, min=1),
     temperature: float = typer.Option(0.0, min=0.0, max=2.0),
     reasoning_effort: str | None = typer.Option(None, help="Lower reasoning effort for supported official OpenAI reasoning models: minimal or low."),
+    connect_timeout_seconds: float = typer.Option(60.0, min=0.001),
+    read_timeout_seconds: float = typer.Option(60.0, min=0.001),
+    write_timeout_seconds: float = typer.Option(60.0, min=0.001),
+    pool_timeout_seconds: float = typer.Option(60.0, min=0.001),
     priority: int | None = typer.Option(None),
     root: Path | None = typer.Option(None),
 ):
@@ -317,8 +321,36 @@ def providers_add_openai_compatible(
             model=model, base_url=base_url, api_key_env=api_key_env,
             default_max_output_tokens=max_output_tokens, default_temperature=temperature,
             reasoning_effort=reasoning_effort, priority=priority,
+            connect_timeout_seconds=connect_timeout_seconds,
+            read_timeout_seconds=read_timeout_seconds,
+            write_timeout_seconds=write_timeout_seconds,
+            pool_timeout_seconds=pool_timeout_seconds,
         )
         typer.echo(json.dumps(add_provider_profile(_root(root), profile), indent=2))
+    except (OSError, ValueError) as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=2)
+
+
+@providers_app.command("set-timeouts")
+def providers_set_timeouts(
+    provider_id: str,
+    connect_timeout_seconds: float | None = typer.Option(None, min=0.001),
+    read_timeout_seconds: float | None = typer.Option(None, min=0.001),
+    write_timeout_seconds: float | None = typer.Option(None, min=0.001),
+    pool_timeout_seconds: float | None = typer.Option(None, min=0.001),
+    root: Path | None = typer.Option(None),
+):
+    """Update timeout values on an existing OpenAI-compatible provider profile."""
+    try:
+        profile = set_provider_timeouts(
+            _root(root), provider_id,
+            connect_timeout_seconds=connect_timeout_seconds,
+            read_timeout_seconds=read_timeout_seconds,
+            write_timeout_seconds=write_timeout_seconds,
+            pool_timeout_seconds=pool_timeout_seconds,
+        )
+        typer.echo(json.dumps(profile, indent=2))
     except (OSError, ValueError) as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(code=2)

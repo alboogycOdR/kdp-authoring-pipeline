@@ -225,6 +225,39 @@ class ManuscriptBuildRow(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
+class ReleaseCandidateRow(Base):
+    __tablename__ = "release_candidate_records"
+    candidate_id: Mapped[str] = mapped_column(String, primary_key=True)
+    title_id: Mapped[str] = mapped_column(ForeignKey("titles.title_id"), nullable=False)
+    build_id: Mapped[str] = mapped_column(ForeignKey("manuscript_builds.build_id"), nullable=False)
+    candidate_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    frozen_inputs_json: Mapped[str] = mapped_column(Text, default="[]")
+    frozen_metadata_json: Mapped[str] = mapped_column(Text, default="{}")
+    rights_summary_json: Mapped[str] = mapped_column(Text, default="{}")
+    ai_use_summary_json: Mapped[str] = mapped_column(Text, default="{}")
+    verification_state_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    rights_state_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    metadata_checks_json: Mapped[str] = mapped_column(Text, default="{}")
+    ai_disclosure_json: Mapped[str] = mapped_column(Text, default="{}")
+    kdp_checks_json: Mapped[str] = mapped_column(Text, default="{}")
+    initial_blockers_json: Mapped[str] = mapped_column(Text, default="[]")
+    status: Mapped[str] = mapped_column(String, nullable=False, default="blocked")
+    created_by: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class ReleasePacketRow(Base):
+    __tablename__ = "release_packets"
+    packet_id: Mapped[str] = mapped_column(String, primary_key=True)
+    candidate_id: Mapped[str] = mapped_column(ForeignKey("release_candidate_records.candidate_id"), nullable=False)
+    title_id: Mapped[str] = mapped_column(ForeignKey("titles.title_id"), nullable=False)
+    asset_id: Mapped[str] = mapped_column(ForeignKey("assets.asset_id"), nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    blockers_json: Mapped[str] = mapped_column(Text, default="[]")
+    created_by: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class CanonProposalRow(Base):
     __tablename__ = "canon_proposals"
     proposal_id: Mapped[str] = mapped_column(String, primary_key=True)

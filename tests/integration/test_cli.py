@@ -77,3 +77,15 @@ def test_verification_cli_groups_and_empty_inspection(tmp_path: Path):
     builds = runner.invoke(app, ["inspect", "builds", title_id, "--root", str(tmp_path)])
     assert builds.exit_code == 0
     assert json.loads(builds.stdout)["records"] == []
+    release_help = runner.invoke(app, ["release", "--help"])
+    assert release_help.exit_code == 0
+    assert "candidate" in release_help.stdout
+    release = runner.invoke(app, ["inspect", "release", title_id, "--root", str(tmp_path)])
+    assert release.exit_code == 0
+    assert json.loads(release.stdout)["candidates"] == []
+    release_help = runner.invoke(app, ["release", "--help"])
+    assert release_help.exit_code == 0
+    assert "candidate" in release_help.stdout
+    release = runner.invoke(app, ["inspect", "release", title_id, "--root", str(tmp_path)])
+    assert release.exit_code == 0
+    assert json.loads(release.stdout)["candidates"] == []

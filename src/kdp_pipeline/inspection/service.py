@@ -8,15 +8,17 @@ from datetime import datetime, timezone
 from contextlib import contextmanager
 from pathlib import Path
 
-from sqlalchemy import create_engine, inspect as sqlalchemy_inspect, or_, select
+from sqlalchemy import create_engine, inspect as sqlalchemy_inspect, or_, select, text
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import NullPool
 
 from kdp_pipeline.models.planning import PlanningArtifactKind, spec_for
 from kdp_pipeline.continuity.service import ContinuityOutputInvalid, _validate_output
+from kdp_pipeline.release.service import _blockers as _release_blockers, _review_hash
 from kdp_pipeline.storage.db import (
     AssetRow, ApprovalRow, AuditEventRow, CanonProposalRow, ChapterQueueRow, ConceptGateRow, EditorialFindingRow,
-    JobRow, ManuscriptBuildRow, ProjectRow, ProvenanceRow, RevisionRecommendationRow, TitleRow,
+    JobRow, ManuscriptBuildRow, ProjectRow, ProvenanceRow, ReleaseCandidateRow, ReleasePacketRow,
+    RevisionRecommendationRow, TitleRow,
     ProviderProfileRow, ProjectProviderSelectionRow, ProjectBudgetRow, RightsLogRow, VerificationItemRow,
     UsageEventRow, BudgetReservationRow, ModelPricingRow,
 )
@@ -27,7 +29,7 @@ REQUIRED_TABLES = {
     "projects", "titles", "assets", "jobs", "provenance", "approvals",
     "editorial_findings", "canon_proposals", "audit_events",
     "provider_profiles", "project_provider_selections", "model_pricing",
-    "project_budgets", "budget_reservations", "usage_events", "verification_items", "rights_log", "manuscript_builds",
+    "project_budgets", "budget_reservations", "usage_events", "verification_items", "rights_log", "manuscript_builds", "release_candidate_records", "release_packets",
 }
 REQUIRED_PROMPTS = (
     "planning/positioning-brief-v1.0.md",
@@ -92,6 +94,22 @@ def inspect_title(root: Path, title_id: str) -> dict:
         manuscript_builds = (list(session.scalars(select(ManuscriptBuildRow).where(
             ManuscriptBuildRow.title_id == title_id).order_by(ManuscriptBuildRow.created_at)))
             if "manuscript_builds" in existing_tables else [])
+        release_candidates = (list(session.scalars(select(ReleaseCandidateRow).where(
+            ReleaseCandidateRow.title_id == title_id).order_by(ReleaseCandidateRow.created_at)))
+            if "release_candidate_records" in existing_tables else [])
+        release_packets = (list(session.scalars(select(ReleasePacketRow).where(
+            ReleasePacketRow.title_id == title_id).order_by(ReleasePacketRow.created_at)))
+            if "release_packets" in existing_tables else [])
+        legacy_release_candidates = []
+        if "release_candidates" in existing_tables:
+            legacy_columns = {column["name"] for column in sqlalchemy_inspect(session.bind).get_columns("release_candidates")}
+            expected_legacy_columns = {"candidate_id", "title_id", "manifest_hash", "approval_id",
+                                       "preflight_path", "frozen", "created_at"}
+            if expected_legacy_columns.issubset(legacy_columns):
+                legacy_release_candidates = [dict(row._mapping) for row in session.execute(text(
+                    "SELECT candidate_id, title_id, manifest_hash, approval_id, preflight_path, frozen, created_at "
+                    "FROM release_candidates WHERE title_id = :title_id ORDER BY created_at"),
+                    {"title_id": title_id})]
         continuity_audits = list(session.scalars(select(AuditEventRow).where(
             AuditEventRow.action.in_(["continuity.output.validated", "continuity.output.rejected"]))))
         continuity_audits_by_job = {row.entity_id: row for row in continuity_audits}
@@ -102,7 +120,10 @@ def inspect_title(root: Path, title_id: str) -> dict:
         related_entity_ids = ([row.asset_id for row in assets] + [row.job_id for row in jobs]
                               + [row.approval_id for row in approvals] + [row.provenance_id for row in provenance]
                               + [row.finding_id for row in findings] + [row.proposal_id for row in proposals]
-                              + [row.usage_event_id for row in usage_rows])
+                              + [row.usage_event_id for row in usage_rows]
+                              + [row.candidate_id for row in release_candidates]
+                              + [row.packet_id for row in release_packets]
+                              + [row["candidate_id"] for row in legacy_release_candidates])
         audit = list(session.scalars(select(AuditEventRow).where(or_(
             AuditEventRow.correlation_id.in_([title_id, title.project_id]),
             AuditEventRow.entity_id.in_(related_entity_ids),
@@ -255,6 +276,11 @@ def inspect_title(root: Path, title_id: str) -> dict:
             manifest_ok = manifest_path.is_file() and sha256_file(manifest_path) == build.manifest_sha256
             if not output_ok or not manifest_ok:
                 inconsistencies.append({"build_id": build.build_id, "issue": "build output or manifest is missing or has a hash mismatch"})
+        for packet in release_packets:
+            packet_asset = assets_by_id.get(packet.asset_id)
+            if (packet_asset is None or not Path(packet_asset.path).is_file()
+                    or sha256_file(Path(packet_asset.path)) != packet.sha256 or packet_asset.sha256 != packet.sha256):
+                inconsistencies.append({"packet_id": packet.packet_id, "issue": "release packet is missing or has a hash mismatch"})
         continuity_runs = []
         invalid_continuity_asset_ids = set()
         continuity_warnings = []
@@ -307,6 +333,28 @@ def inspect_title(root: Path, title_id: str) -> dict:
                 "output_exists": bool(assets_by_id.get(build.asset_id) and Path(assets_by_id[build.asset_id].path).is_file()),
                 "manifest_exists": Path(build.manifest_path).is_file()}
                 for build in manuscript_builds]},
+            "release": {"candidates": [{"candidate_id": candidate.candidate_id,
+                "build_id": candidate.build_id, "candidate_sha256": candidate.candidate_sha256,
+                "status": candidate.status, "created_by": candidate.created_by,
+                "frozen_inputs": json.loads(candidate.frozen_inputs_json or "[]"),
+                "metadata": json.loads(candidate.frozen_metadata_json or "{}"),
+                "metadata_checks": json.loads(candidate.metadata_checks_json or "{}"),
+                "rights_summary": json.loads(candidate.rights_summary_json or "{}"),
+                "ai_use_summary": json.loads(candidate.ai_use_summary_json or "{}"),
+                "ai_disclosure": json.loads(candidate.ai_disclosure_json or "{}"),
+                "kdp_checks": json.loads(candidate.kdp_checks_json or "{}"),
+                "approval_id": next((approval.approval_id for approval in approvals
+                    if approval.scope == "release_candidate" and approval.candidate_hash == _review_hash(candidate)), None),
+                "current_blockers": _release_blockers(session, candidate)}
+                for candidate in release_candidates],
+                "packets": [{"packet_id": packet.packet_id, "candidate_id": packet.candidate_id,
+                    "asset_id": packet.asset_id, "sha256": packet.sha256,
+                    "path": assets_by_id[packet.asset_id].path if packet.asset_id in assets_by_id else None,
+                    "blockers": json.loads(packet.blockers_json or "[]")}
+                    for packet in release_packets],
+                "approval_queue": [candidate.candidate_id for candidate in release_candidates
+                    if candidate.status in {"blocked", "pending_human_review", "held"}],
+                "legacy_candidates": legacy_release_candidates},
             "jobs": [{"job_id": job.job_id, "job_type": job.job_type, "status": job.status,
                       "error": job.error, "idempotency_key": job.idempotency_key,
                       "request_diagnostics": request_diagnostics_by_job.get(job.job_id),

@@ -21,6 +21,8 @@ from kdp_pipeline.verification import (add_verification_flag, decide_rights_reco
     decide_verification, record_rights, scan_scripture_placeholders)
 from kdp_pipeline.models.planning import PlanningArtifactKind
 from kdp_pipeline.planning import PlanningService, accept_planning_artifact
+from kdp_pipeline.release import (create_release_candidate, export_release_packet,
+    record_candidate_check, review_release_candidate)
 from kdp_pipeline.providers.settings import ProviderProfileSettings
 from kdp_pipeline.providers.configuration import (
     add_provider_profile, check_provider_profile, list_provider_profiles,
@@ -61,6 +63,7 @@ chapters_app = typer.Typer(help="Queue and inspect bounded chapter work")
 verification_app = typer.Typer(help="Track Scripture, source, and expert verification")
 rights_app = typer.Typer(help="Track rights and licensing review")
 build_app = typer.Typer(help="Assemble accepted manuscript assets")
+release_app = typer.Typer(help="Freeze and review release candidates")
 app.add_typer(positioning_app, name="positioning")
 app.add_typer(brief_app, name="brief")
 app.add_typer(outline_app, name="outline")
@@ -78,6 +81,7 @@ app.add_typer(chapters_app, name="chapters")
 app.add_typer(verification_app, name="verify")
 app.add_typer(rights_app, name="rights")
 app.add_typer(build_app, name="build")
+app.add_typer(release_app, name="release")
 
 
 def _root(root: Path | None) -> Path:
@@ -758,6 +762,60 @@ def manuscript_matter_accept(asset_id: str, reviewer: str = typer.Option(...),
                            "path": asset.path}))
 
 
+@release_app.command("candidate")
+def release_candidate(title_id: str, build_id: str, creator: str = typer.Option(...),
+                      root: Path | None = typer.Option(None)):
+    try:
+        row = create_release_candidate(_root(root), title_id=title_id,
+            build_id=build_id, creator=creator)
+    except (OSError, ValueError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
+    typer.echo(json.dumps({"candidate_id": row.candidate_id, "status": row.status,
+        "candidate_sha256": row.candidate_sha256}))
+
+
+@release_app.command("check")
+def release_check(candidate_id: str, domain: str, key: str, decision: str,
+                  reviewer: str = typer.Option(...), rationale: str = typer.Option(...),
+                  evidence_reference: str = typer.Option(...), value: str | None = typer.Option(None),
+                  statement: str | None = typer.Option(None), root: Path | None = typer.Option(None)):
+    try:
+        row = record_candidate_check(_root(root), candidate_id, domain=domain, key=key,
+            decision=decision, reviewer=reviewer, rationale=rationale,
+            evidence_reference=evidence_reference, value=value, statement=statement)
+    except (OSError, ValueError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
+    typer.echo(json.dumps({"candidate_id": row.candidate_id, "status": row.status}))
+
+
+@release_app.command("review")
+def release_review(candidate_id: str, decision: str, reviewer: str = typer.Option(...),
+                   rationale: str = typer.Option(...), root: Path | None = typer.Option(None)):
+    try:
+        row, approval = review_release_candidate(_root(root), candidate_id, decision=decision,
+            reviewer=reviewer, rationale=rationale)
+    except (OSError, ValueError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
+    typer.echo(json.dumps({"candidate_id": row.candidate_id, "status": row.status,
+        "approval_id": approval.approval_id if approval else None,
+        "approved": approval is not None and approval.decision == "accepted"}))
+
+
+@release_app.command("packet")
+def release_packet(candidate_id: str, creator: str = typer.Option(...),
+                   root: Path | None = typer.Option(None)):
+    try:
+        row, asset = export_release_packet(_root(root), candidate_id, creator=creator)
+    except (OSError, ValueError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
+    typer.echo(json.dumps({"packet_id": row.packet_id, "asset_id": asset.asset_id,
+                           "path": asset.path, "sha256": row.sha256}))
+
+
 @chapter_app.command("revise")
 def chapter_revise(title_id: str, chapter_number: int, asset_id: str = typer.Option(...), root: Path | None = typer.Option(None)):
     try:
@@ -855,6 +913,15 @@ def inspect_verification(title_id: str, root: Path | None = typer.Option(None)):
 def inspect_builds(title_id: str, root: Path | None = typer.Option(None)):
     try:
         _print_inspection(title_id, _root(root), "builds")
+    except (OSError, ValueError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
+
+
+@inspect_app.command("release")
+def inspect_release(title_id: str, root: Path | None = typer.Option(None)):
+    try:
+        _print_inspection(title_id, _root(root), "release")
     except (OSError, ValueError) as e:
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(code=2)

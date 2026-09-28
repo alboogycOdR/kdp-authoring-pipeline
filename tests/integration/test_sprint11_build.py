@@ -21,21 +21,26 @@ from kdp_pipeline.storage.service import (advance_to_drafting, advance_to_planne
 
 
 class BookFixtureProvider(FakeProvider):
+    def __init__(self, *, include_placeholder: bool = True):
+        super().__init__()
+        self.include_placeholder = include_placeholder
+
     async def generate(self, request):
         if request.task_type == "chapter.draft.1":
             text = "# First Chapter\n\nOpening for the first chapter.\n"
         elif request.task_type == "chapter.draft.2":
-            text = "# Second Chapter\n\n[SCRIPTURE NEEDED]\nSecond chapter text.\n"
+            placeholder = "[SCRIPTURE NEEDED]\n" if self.include_placeholder else ""
+            text = f"# Second Chapter\n\n{placeholder}Second chapter text.\n"
         else:
             return await super().generate(request)
         return GenerationResult(provider=self.provider_name, model=self.model_name, text=text, latency_ms=0)
 
 
-def _setup_book(root: Path, *, accept_chapters: bool = True):
+def _setup_book(root: Path, *, accept_chapters: bool = True, include_placeholder: bool = True):
     shutil.copytree(Path("prompts"), root / "prompts")
     project = create_project(root, "Sprint 11 build")
     title = create_title(root, project.project_id, "Book build fixture")
-    provider = BookFixtureProvider()
+    provider = BookFixtureProvider(include_placeholder=include_placeholder)
     for kind, number in ((PlanningArtifactKind.POSITIONING, None),
         (PlanningArtifactKind.BOOK_BRIEF, None), (PlanningArtifactKind.OUTLINE, None),
         (PlanningArtifactKind.CHAPTER_CARD, 1), (PlanningArtifactKind.CHAPTER_CARD, 2)):

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 from datetime import datetime, timezone
 from contextlib import contextmanager
@@ -14,7 +15,7 @@ from sqlalchemy.pool import NullPool
 from kdp_pipeline.models.planning import PlanningArtifactKind, spec_for
 from kdp_pipeline.continuity.service import ContinuityOutputInvalid, _validate_output
 from kdp_pipeline.storage.db import (
-    AssetRow, ApprovalRow, AuditEventRow, CanonProposalRow, ConceptGateRow, EditorialFindingRow,
+    AssetRow, ApprovalRow, AuditEventRow, CanonProposalRow, ChapterQueueRow, ConceptGateRow, EditorialFindingRow,
     JobRow, ProjectRow, ProvenanceRow, TitleRow,
     ProviderProfileRow, ProjectProviderSelectionRow, ProjectBudgetRow,
     UsageEventRow, BudgetReservationRow, ModelPricingRow,
@@ -183,6 +184,49 @@ def inspect_title(root: Path, title_id: str) -> dict:
 
         accepted_chapters = [asset for asset in assets if asset.asset_type == "chapter.accepted" and asset.approval_status == "accepted"]
         experimental_chapters = [asset for asset in assets if asset.asset_type in {"chapter.draft", "chapter.revision"} and asset.approval_status == "experimental"]
+        chapter_numbers = set()
+        for asset in assets:
+            name = Path(asset.path).name
+            match = (re.search(r"chapter-(\d{3})\.md$", name) if asset.asset_type in {"chapter.accepted", "planning.chapter-card"}
+                     else re.search(r"chapter\.(?:draft|revision)\.(\d+)[-.]", name) if asset.asset_type in {"chapter.draft", "chapter.revision"} else None)
+            if match:
+                chapter_numbers.add(int(match.group(1)))
+        queue_rows = (list(session.scalars(select(ChapterQueueRow).where(ChapterQueueRow.title_id == title_id)))
+                      if "chapter_queue" in existing_tables else [])
+        queue_by_number = {row.chapter_number: row for row in queue_rows}
+        chapter_work_items = []
+        for number in sorted(chapter_numbers | set(queue_by_number)):
+            has_card = any(a.asset_type == "planning.chapter-card" and a.approval_status == "accepted"
+                           and re.search(rf"chapter-{number:03d}\.md$", Path(a.path).name) for a in assets)
+            accepted_for_number = any(re.search(rf"chapter-{number:03d}\.md$", Path(a.path).name) for a in accepted_chapters)
+            drafts_for_number = [a.asset_id for a in experimental_chapters
+                                 if re.search(rf"chapter\.(?:draft|revision)\.{number}[-.]", Path(a.path).name)]
+            queued = queue_by_number.get(number)
+            failed_job = any(j.status == "failed" and j.job_type.endswith(f".{number}")
+                             and j.job_type.startswith(("generate:chapter.draft.", "generate:chapter.revise.")) for j in jobs)
+            accepted_numbered = [(int(m.group(1)), a.asset_id) for a in accepted_chapters
+                                 if (m := re.search(r"chapter-(\d{3})\.md$", Path(a.path).name))]
+            summary_sources = {a.source_ref for a in assets if a.asset_type == "chapter.summary"
+                               and a.approval_status == "accepted" and a.asset_id in {p.asset_id for p in provenance}
+                               and any(ap.asset_id == a.asset_id and ap.decision == "accepted" for ap in approvals)
+                               and Path(a.path).is_file() and sha256_file(Path(a.path)) == a.sha256}
+            missing_summaries = sorted(n for n, aid in accepted_numbered if n < number and aid not in summary_sources)
+            state = ("complete" if accepted_for_number else "missing_card" if not has_card
+                     else "paused" if queued and queued.status == "paused" else "failed" if failed_job
+                     else "awaiting_prior_summary" if missing_summaries
+                     else "draft_ready" if drafts_for_number else queued.status if queued else "needs_queue")
+            chapter_work_items.append({"chapter_number": number, "status": state,
+                "card_present": has_card, "draft_asset_ids": drafts_for_number,
+                "accepted": accepted_for_number, "queue_item_id": queued.queue_item_id if queued else None,
+                "missing_prior_summaries": missing_summaries,
+                "open_findings": [f.finding_id for f in findings if f.status == "open" and f.location == f"chapter-{number:03d}"]})
+        chapter_workflow = {"chapter_count": len(chapter_work_items), "accepted_chapter_count": len(accepted_chapters),
+            "chapters": chapter_work_items,
+            "missing_cards": [c["chapter_number"] for c in chapter_work_items if c["status"] == "missing_card"],
+            "failed_chapters": [c["chapter_number"] for c in chapter_work_items if c["status"] == "failed"],
+            "missing_prior_summary_chapters": [c["chapter_number"] for c in chapter_work_items if c.get("missing_prior_summaries")],
+            "verification_conditions": [{"approval_id": a.approval_id, "asset_id": a.asset_id,
+                "conditions": json.loads(a.conditions_json or "[]")} for a in approvals if json.loads(a.conditions_json or "[]")]}
         inconsistencies = [check for asset in assets if not (check := _file_check(asset))["hash_matches"]]
         inconsistencies += [{"asset_id": asset.asset_id, "issue": "missing provenance"} for asset in assets if asset.creator_type == "ai" and not any(item.asset_id == asset.asset_id for item in provenance)]
         inconsistencies += [{"asset_id": asset.asset_id, "issue": "accepted asset missing approval"} for asset in assets if asset.approval_status == "accepted" and not any(item.asset_id == asset.asset_id and item.decision == "accepted" for item in approvals)]
@@ -226,6 +270,7 @@ def inspect_title(root: Path, title_id: str) -> dict:
             "concept": concepts,
             "chapter_lifecycle": {"drafting_state": title.status == "DRAFTING", "experimental_chapter_assets": [asset.asset_id for asset in experimental_chapters],
                                   "accepted_chapter_assets": [asset.asset_id for asset in accepted_chapters], "accepted_chapter_count": len(accepted_chapters)},
+            "chapter_workflow": chapter_workflow,
             "assets": [{"asset_id": asset.asset_id, "asset_type": asset.asset_type, "path": asset.path, "sha256": asset.sha256, "approval_status": asset.approval_status, "source_ref": asset.source_ref} for asset in assets],
             "jobs": [{"job_id": job.job_id, "job_type": job.job_type, "status": job.status,
                       "error": job.error, "idempotency_key": job.idempotency_key,

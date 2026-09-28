@@ -22,6 +22,8 @@ from kdp_pipeline.storage.audit import AuditEventWriter
 from kdp_pipeline.storage.db import (
     AssetRow,
     ApprovalRow,
+    ChapterQueueRow,
+    EditorialFindingRow,
     ProjectRow,
     ProvenanceRow,
     TitleRow,
@@ -86,6 +88,49 @@ def _planning_context(session, title_id: str, chapter_card: AssetRow, chapter_nu
     )
 
 
+def _chapter_authoring_context(session, title_id: str, chapter_number: int,
+                               manifest: ContextManifest) -> tuple[ContextManifest, str]:
+    inputs = list(manifest.inputs)
+    accepted = list(session.scalars(select(AssetRow).where(
+        AssetRow.title_id == title_id, AssetRow.asset_type == ChapterAssetKind.ACCEPTED.value,
+        AssetRow.approval_status == "accepted")))
+    for chapter in accepted:
+        match = _CHAPTER_CARD_NAME.search(Path(chapter.path).name)
+        if not match or int(match.group("number")) >= chapter_number:
+            continue
+        number = int(match.group("number"))
+        chapter_approval = session.scalar(select(ApprovalRow).where(
+            ApprovalRow.asset_id == chapter.asset_id, ApprovalRow.decision == "accepted"))
+        if chapter_approval is None or not Path(chapter.path).is_file() or sha256_file(Path(chapter.path)) != chapter.sha256:
+            raise ValueError(f"Prior accepted chapter failed approval or integrity check: {chapter.asset_id}")
+        summary = session.scalar(select(AssetRow).where(AssetRow.title_id == title_id,
+            AssetRow.asset_type == "chapter.summary", AssetRow.source_ref == chapter.asset_id,
+            AssetRow.approval_status == "accepted").order_by(AssetRow.created_at.desc()))
+        if summary is None:
+            raise ValueError(f"Accepted prior chapter {number} requires a reviewed context summary before drafting chapter {chapter_number}")
+        approval = session.scalar(select(ApprovalRow).where(ApprovalRow.asset_id == summary.asset_id,
+            ApprovalRow.decision == "accepted"))
+        path = Path(summary.path)
+        if approval is None or not path.is_file() or sha256_file(path) != summary.sha256:
+            raise ValueError(f"Prior chapter summary is missing approval or failed integrity check: {summary.asset_id}")
+        inputs.append(ContextInput(input_ref=summary.asset_id, sha256=summary.sha256,
+                                   context_tier="A", role=f"prior_chapter_{number}_summary"))
+    sections = []
+    for item in inputs:
+        asset = session.get(AssetRow, item.input_ref)
+        if asset is None:
+            finding = session.get(EditorialFindingRow, item.input_ref)
+            if finding is not None and finding.title_id == title_id:
+                sections.append(f"## Editorial finding {finding.finding_id}\n{finding.description}\nEvidence: {finding.evidence or ''}\nRecommended action: {finding.recommended_action or ''}")
+            continue
+        path = Path(asset.path)
+        if not path.is_file() or sha256_file(path) != asset.sha256:
+            raise ValueError(f"Authoring context file/hash integrity check failed: {asset.asset_id}")
+        sections.append(f"## {item.role or asset.asset_type} (asset {asset.asset_id})\n{path.read_text(encoding='utf-8')}")
+    return (ContextManifest(title_id=manifest.title_id, task_type=manifest.task_type, inputs=inputs),
+            "\n\n".join(sections))
+
+
 class ChapterService:
     @staticmethod
     async def draft(
@@ -109,6 +154,7 @@ class ChapterService:
             if card is None:
                 raise ValueError(f"Accepted chapter card not found for chapter {chapter_number}")
             context_manifest = _planning_context(session, title_id, card, chapter_number)
+            context_manifest, chapter_context = _chapter_authoring_context(session, title_id, chapter_number, context_manifest)
             title_values = {
                 "title_id": title_id,
                 "working_title": title.working_title,
@@ -116,7 +162,7 @@ class ChapterService:
                 "chapter_number": str(chapter_number),
             }
         prompt = PromptRegistry(root / "prompts").render(
-            "drafting/chapter-draft", {**title_values, **(variables or {})}
+            "drafting/chapter-draft", {**title_values, "chapter_context": chapter_context, **(variables or {})}
         )
         return await GenerationService.generate(
             root,
@@ -159,22 +205,31 @@ class ChapterService:
             if card is None:
                 raise ValueError(f"Accepted chapter card not found for chapter {chapter_number}")
             context_manifest = _planning_context(session, title_id, card, chapter_number)
+            finding_inputs = []
+            for finding_id in finding_ids or []:
+                finding = session.get(EditorialFindingRow, finding_id)
+                if finding is None or finding.title_id != title_id:
+                    raise ValueError(f"Unknown editorial finding for this title: {finding_id}")
+                finding_payload = {"finding_id": finding.finding_id, "description": finding.description,
+                                   "evidence": finding.evidence, "recommended_action": finding.recommended_action}
+                finding_inputs.append(ContextInput(input_ref=finding.finding_id,
+                    sha256=sha256_bytes(canonical_json_bytes(finding_payload)),
+                    context_tier="B", role="editorial_finding"))
             context_manifest = ContextManifest(
                 title_id=title_id,
                 task_type=f"chapter.revise.{chapter_number}",
                 inputs=context_manifest.inputs + [ContextInput(
                     input_ref=source.asset_id, sha256=source.sha256, context_tier="A", role="source_draft"
-                )] + [ContextInput(
-                    input_ref=finding_id, sha256=sha256_bytes(canonical_json_bytes({"finding_id": finding_id})), context_tier="B", role="editorial_finding"
-                ) for finding_id in (finding_ids or [])],
+                )] + finding_inputs,
             )
+            context_manifest, chapter_context = _chapter_authoring_context(session, title_id, chapter_number, context_manifest)
             title_values = {
                 "title_id": title_id,
                 "working_title": title.working_title,
                 "target_reader": title.target_reader or "unspecified",
                 "chapter_number": str(chapter_number),
             }
-        prompt = PromptRegistry(root / "prompts").render("drafting/chapter-revise", title_values)
+        prompt = PromptRegistry(root / "prompts").render("drafting/chapter-revise", {**title_values, "chapter_context": chapter_context})
         return await GenerationService.generate(
             root,
             title_id=title_id,
@@ -243,6 +298,11 @@ def accept_chapter(
                     and existing_path.is_file()
                     and sha256_file(existing_path) == existing.sha256 == source.sha256
                 ):
+                    queue_item = session.scalar(select(ChapterQueueRow).where(
+                        ChapterQueueRow.title_id == source.title_id, ChapterQueueRow.chapter_number == chapter_number))
+                    if queue_item and queue_item.status != "complete":
+                        queue_item.status = "complete"
+                        queue_item.updated_at = utcnow()
                     AuditEventWriter.append(
                         session, actor_id=reviewer, action="chapter.reused", entity_type="asset",
                         entity_id=existing.asset_id, correlation_id=source.title_id, result="success",
@@ -282,6 +342,15 @@ def accept_chapter(
                 reviewer=reviewer,
             )
             session.add_all([accepted, approval, accepted_provenance])
+            queue_item = session.scalar(select(ChapterQueueRow).where(
+                ChapterQueueRow.title_id == source.title_id, ChapterQueueRow.chapter_number == chapter_number))
+            if queue_item is not None:
+                queue_item.status = "complete"
+                queue_item.updated_at = utcnow()
+                AuditEventWriter.append(session, actor_id=reviewer, action="chapters.queue.item_completed",
+                    entity_type="chapter_queue_item", entity_id=queue_item.queue_item_id,
+                    correlation_id=source.title_id, result="success",
+                    metadata={"chapter_number": chapter_number, "accepted_asset_id": accepted.asset_id})
             metadata = {
                 "source_asset_id": source.asset_id, "source_path": str(source_path),
                 "destination_path": str(destination), "approval_id": approval.approval_id,

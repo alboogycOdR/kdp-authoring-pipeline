@@ -11,6 +11,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
     create_engine,
     inspect as sqlalchemy_inspect,
     text,
@@ -123,6 +124,17 @@ class ConceptGateRow(Base):
     __tablename__ = "concept_gates"
     title_id: Mapped[str] = mapped_column(ForeignKey("titles.title_id"), primary_key=True)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class ChapterQueueRow(Base):
+    __tablename__ = "chapter_queue"
+    __table_args__ = (UniqueConstraint("title_id", "chapter_number", name="uq_chapter_queue_title_number"),)
+    queue_item_id: Mapped[str] = mapped_column(String, primary_key=True)
+    title_id: Mapped[str] = mapped_column(ForeignKey("titles.title_id"), nullable=False)
+    chapter_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String, nullable=False, default="queued")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 

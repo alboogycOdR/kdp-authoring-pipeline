@@ -9,6 +9,7 @@ from sqlalchemy import select
 from kdp_pipeline.context import ContextManifest
 from kdp_pipeline.concept import (ConceptService, accept_concept, enable_concept_gate,
                                   score_concept_asset, validate_concept_asset)
+from kdp_pipeline.chapters import chapter_status, queue_chapters, record_chapter_summary, resume_queue, stop_queue
 from kdp_pipeline.core.state_machine import TitleState
 from kdp_pipeline.chapter import ChapterService, accept_chapter
 from kdp_pipeline.continuity import ContinuityService, approve_canon_proposal
@@ -52,6 +53,7 @@ providers_app = typer.Typer(help="Configure and inspect local provider profiles"
 pricing_app = typer.Typer(help="Configure local model pricing")
 budget_app = typer.Typer(help="Configure project generation budgets")
 concept_app = typer.Typer(help="Develop and validate book concepts")
+chapters_app = typer.Typer(help="Queue and inspect bounded chapter work")
 app.add_typer(positioning_app, name="positioning")
 app.add_typer(brief_app, name="brief")
 app.add_typer(outline_app, name="outline")
@@ -65,6 +67,7 @@ app.add_typer(providers_app, name="providers")
 app.add_typer(pricing_app, name="pricing")
 app.add_typer(budget_app, name="budget")
 app.add_typer(concept_app, name="concept")
+app.add_typer(chapters_app, name="chapters")
 
 
 def _root(root: Path | None) -> Path:
@@ -263,6 +266,63 @@ def concept_approve(asset_id: str, reviewer: str = typer.Option(...), root: Path
 def concept_drafting_brief(title_id: str, asset_id: str = typer.Option(..., help="Accepted concept brief asset"), root: Path | None = typer.Option(None)):
     try: _print_generation_result(_run_concept(_root(root), title_id, "drafting-brief", asset_id=asset_id))
     except (OSError, ValueError, RuntimeError) as e: typer.echo(f"Error: {e}", err=True); raise typer.Exit(code=2)
+
+
+@chapters_app.command("list")
+def chapters_list(title_id: str, root: Path | None = typer.Option(None)):
+    try: typer.echo(json.dumps(chapter_status(_root(root), title_id), indent=2))
+    except (OSError, ValueError) as e: typer.echo(f"Error: {e}", err=True); raise typer.Exit(code=2)
+
+
+@chapters_app.command("status")
+def chapters_status(title_id: str, root: Path | None = typer.Option(None)):
+    chapters_list(title_id, root)
+
+
+@chapters_app.command("queue")
+def chapters_queue(title_id: str, through: int = typer.Option(..., min=1), start: int = typer.Option(1, min=1), root: Path | None = typer.Option(None)):
+    try:
+        rows = queue_chapters(_root(root), title_id, start, through)
+        typer.echo(json.dumps([{"chapter_number": r.chapter_number, "status": r.status, "queue_item_id": r.queue_item_id} for r in rows], indent=2))
+    except (OSError, ValueError) as e: typer.echo(f"Error: {e}", err=True); raise typer.Exit(code=2)
+
+
+@chapters_app.command("stop")
+def chapters_stop(title_id: str, root: Path | None = typer.Option(None)):
+    try: typer.echo(json.dumps({"paused_items": stop_queue(_root(root), title_id)}))
+    except (OSError, ValueError) as e: typer.echo(f"Error: {e}", err=True); raise typer.Exit(code=2)
+
+
+@chapters_app.command("resume")
+def chapters_resume(title_id: str, root: Path | None = typer.Option(None)):
+    try: typer.echo(json.dumps({"resumed_items": resume_queue(_root(root), title_id)}))
+    except (OSError, ValueError) as e: typer.echo(f"Error: {e}", err=True); raise typer.Exit(code=2)
+
+
+@chapters_app.command("next")
+def chapters_next(title_id: str, draft: bool = typer.Option(False, help="Draft only this one queued chapter"), root: Path | None = typer.Option(None)):
+    try:
+        report = chapter_status(_root(root), title_id)
+        candidate = report["next_chapter"]
+        if candidate is None:
+            typer.echo(json.dumps({"next_chapter": None, "message": "No queued chapter is ready for work.", **report}))
+        elif draft:
+            if candidate["status"] != "queued":
+                raise ValueError(f"Next chapter is {candidate['status']}; draft flag requires a queued chapter")
+            _print_generation_result(asyncio.run(ChapterService.draft(_root(root), title_id=title_id,
+                chapter_number=candidate["chapter_number"])))
+        else:
+            typer.echo(json.dumps({"next_chapter": candidate}, indent=2))
+    except (OSError, ValueError, RuntimeError) as e: typer.echo(f"Error: {e}", err=True); raise typer.Exit(code=2)
+
+
+@chapters_app.command("summary")
+def chapters_summary(title_id: str, chapter_number: int = typer.Option(..., min=1), asset_id: str = typer.Option(...),
+                     summary: str = typer.Option(...), reviewer: str = typer.Option(...), root: Path | None = typer.Option(None)):
+    try:
+        asset = record_chapter_summary(_root(root), title_id, chapter_number, asset_id, summary, reviewer)
+        typer.echo(json.dumps({"asset_id": asset.asset_id, "path": asset.path, "sha256": asset.sha256}))
+    except (OSError, ValueError) as e: typer.echo(f"Error: {e}", err=True); raise typer.Exit(code=2)
 
 
 @positioning_app.command("create")

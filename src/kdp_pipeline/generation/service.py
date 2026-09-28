@@ -304,7 +304,14 @@ class GenerationService:
             provider = resolve_project_provider(root, project_id)
         provider_profile_id = getattr(provider, "profile_id", None)
         if max_output_tokens is None:
-            max_output_tokens = getattr(provider, "default_max_output_tokens", 1200)
+            max_output_tokens = None
+            if provider_profile_id is not None:
+                with session_scope(root) as session:
+                    profile_defaults = session.get(ProviderProfileRow, provider_profile_id)
+                    if profile_defaults is not None and profile_defaults.model == provider.model_name:
+                        max_output_tokens = profile_defaults.default_max_output_tokens
+            if max_output_tokens is None:
+                max_output_tokens = getattr(provider, "default_max_output_tokens", None) or 1200
         if temperature is None and hasattr(provider, "default_temperature"):
             temperature = provider.default_temperature
         provider_name, model_name = _provider_identity(provider)
@@ -358,6 +365,22 @@ class GenerationService:
                 profile = session.get(ProviderProfileRow, provider_profile_id) if provider_profile_id else None
                 if provider_profile_id and (profile is None or profile.model != model_name):
                     raise GenerationServiceError("Selected provider profile is unavailable")
+                effective_request = {
+                    "provider_profile_id": provider_profile_id,
+                    "model": model_name,
+                    "max_output_tokens": max_output_tokens,
+                    "prompt_template_id": rendered_prompt.template_id,
+                    "prompt_template_version": rendered_prompt.template_version,
+                }
+                if profile is not None:
+                    if profile.reasoning_effort is not None:
+                        effective_request["reasoning_effort"] = profile.reasoning_effort
+                    effective_request["timeouts_seconds"] = {
+                        "connect": profile.connect_timeout_seconds,
+                        "read": profile.read_timeout_seconds,
+                        "write": profile.write_timeout_seconds,
+                        "pool": profile.pool_timeout_seconds,
+                    }
                 pricing = session.get(ModelPricingRow, (provider_profile_id, model_name)) if provider_profile_id else None
                 budget_result = evaluate_and_reserve(
                     session, project_id=title.project_id, job_id=job.job_id, pricing=pricing,
@@ -388,6 +411,7 @@ class GenerationService:
                         result="success",
                         metadata={"idempotency_key": idempotency_key, "task_type": task_type,
                                   "provider_id": provider_profile_id,
+                                  "effective_request": effective_request,
                                   "preflight_estimated_cost_usd": budget_result["estimate"],
                                   "preflight_currency": budget_result["currency"],
                                   "reservation_id": (budget_result["reservation"].reservation_id

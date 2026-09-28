@@ -83,6 +83,9 @@ def test_verification_cli_groups_and_empty_inspection(tmp_path: Path):
     release = runner.invoke(app, ["inspect", "release", title_id, "--root", str(tmp_path)])
     assert release.exit_code == 0
     assert json.loads(release.stdout)["candidates"] == []
+    workspace_help = runner.invoke(app, ["workspace", "--help"])
+    assert workspace_help.exit_code == 0
+    assert "dashboard" in workspace_help.stdout
     release_help = runner.invoke(app, ["release", "--help"])
     assert release_help.exit_code == 0
     assert "candidate" in release_help.stdout

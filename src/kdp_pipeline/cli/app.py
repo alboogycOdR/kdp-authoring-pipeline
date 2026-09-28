@@ -19,6 +19,7 @@ from kdp_pipeline.editorial import StructuredEditorialService, create_revision_r
 from kdp_pipeline.inspection import doctor as run_doctor, inspect_title
 from kdp_pipeline.verification import (add_verification_flag, decide_rights_record,
     decide_verification, record_rights, scan_scripture_placeholders)
+from kdp_pipeline.workspace import generate_dashboard
 from kdp_pipeline.models.planning import PlanningArtifactKind
 from kdp_pipeline.planning import PlanningService, accept_planning_artifact
 from kdp_pipeline.release import (create_release_candidate, export_release_packet,
@@ -64,6 +65,7 @@ verification_app = typer.Typer(help="Track Scripture, source, and expert verific
 rights_app = typer.Typer(help="Track rights and licensing review")
 build_app = typer.Typer(help="Assemble accepted manuscript assets")
 release_app = typer.Typer(help="Freeze and review release candidates")
+workspace_app = typer.Typer(help="Generate a local read-only operator workspace")
 app.add_typer(positioning_app, name="positioning")
 app.add_typer(brief_app, name="brief")
 app.add_typer(outline_app, name="outline")
@@ -82,6 +84,7 @@ app.add_typer(verification_app, name="verify")
 app.add_typer(rights_app, name="rights")
 app.add_typer(build_app, name="build")
 app.add_typer(release_app, name="release")
+app.add_typer(workspace_app, name="workspace")
 
 
 def _root(root: Path | None) -> Path:
@@ -988,6 +991,18 @@ def doctor(root: Path | None = typer.Option(None)):
         typer.echo(f"{check['status']}: {check['check']} — {check['message']}")
         if check["status"] != "OK" and check["recommended_action"]:
             typer.echo(f"  Action: {check['recommended_action']}")
+
+
+@workspace_app.command("dashboard")
+def workspace_dashboard(output: Path | None = typer.Option(None, "--output"),
+                        root: Path | None = typer.Option(None)):
+    try:
+        result = generate_dashboard(_root(root), output_path=output)
+    except (OSError, ValueError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
+    typer.echo(json.dumps({"output_path": str(result.output_path),
+        "project_count": result.project_count, "title_count": result.title_count}))
 
 
 if __name__ == "__main__":

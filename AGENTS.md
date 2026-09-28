@@ -1,12 +1,29 @@
 # KDP Pipeline Agent Instructions
 
-## Architectural source of truth
+## Architecture Documentation Hierarchy
 
-The current architectural source of truth is:
+Use this precedence when locating or evaluating architecture guidance:
 
-`docs/architecture/KDP_PIPELINE_SYSTEM_ARCHITECTURE_BUILD_SPEC_v1.0.md`
+1. `AGENTS.md` — repository instructions and agent boundaries.
+2. `KDP_PIPELINE_MASTER_ARCHITECTURE_PACK/` — long-term architecture source of truth.
+3. `docs/architecture/` — detailed architecture and build specifications.
+4. `docs/operations/` — workflow procedures, sprint reports, and pilot records.
+5. Other project documentation.
 
-Do not silently change the architecture. If an implementation conflicts with the architecture specification, stop and report the conflict before proceeding.
+Architectural decisions and implementation must remain consistent with the Master Architecture Pack. If guidance conflicts, `AGENTS.md` wins, followed by the Architecture Pack, then the remaining project documentation in the order above. Do not silently change architecture. Stop and report a conflict before proceeding with work that depends on resolving it.
+
+Use [the architecture index](docs/ARCHITECTURE_INDEX.md) to navigate the architecture pack, detailed specifications, operational documentation, ADRs, and reports.
+
+## Project Governance Documents
+
+These entry points work together to define project governance:
+
+- [ARCHITECTURE.md](ARCHITECTURE.md) explains the system and points to authoritative architecture material.
+- [ROADMAP.md](ROADMAP.md) summarizes completed and planned milestones; implementation scope still requires explicit task authorization.
+- [DECISIONS.md](DECISIONS.md) indexes accepted architecture decisions and links to their ADRs.
+- [KDP_PIPELINE_MASTER_ARCHITECTURE_PACK/](KDP_PIPELINE_MASTER_ARCHITECTURE_PACK/README.md) holds the long-term architecture baseline and decision records.
+
+These navigation documents do not override this file's agent instructions or create authorization for future work. Keep implementation aligned with the Master Architecture Pack and raise conflicts for review.
 
 Do not implement functionality from future sprints merely because it seems useful. Keep work within the requested sprint and scope.
 

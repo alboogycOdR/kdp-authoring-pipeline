@@ -11,3 +11,6 @@ __pycache__/
 # Private/unpublished publishing projects
 projects/*
 !projects/.gitkeep
+
+# Generated local operator reports
+reports/

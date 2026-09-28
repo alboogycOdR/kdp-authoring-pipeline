@@ -1,8 +1,20 @@
 # KDP Pipeline — Local Authoring Workflow
 
-This is the first executable scaffold for the local-first KDP authoring pipeline.
+Local-first, audited, AI-assisted production workflows for KDP books, with human approval gates from concept through release preflight.
 
-Implemented now:
+## Repository navigation
+
+Suggested reading order for contributors and AI agents:
+
+1. [README.md](README.md) — repository setup and quick orientation.
+2. [ARCHITECTURE.md](ARCHITECTURE.md) — architectural landing page and links.
+3. [AGENTS.md](AGENTS.md) — repository instructions and documentation precedence.
+4. [KDP Pipeline Master Architecture Pack](KDP_PIPELINE_MASTER_ARCHITECTURE_PACK/README.md) — long-term architecture source of truth.
+5. [docs/](docs/ARCHITECTURE_INDEX.md) — detailed specifications, operations, and reports.
+
+For roadmap status and accepted architecture decisions, see [ROADMAP.md](ROADMAP.md) and [DECISIONS.md](DECISIONS.md).
+
+Repository foundation includes:
 
 - Python package + CLI
 - SQLite state database
@@ -13,16 +25,25 @@ Implemented now:
 - basic project/title commands
 - tests for workspace creation and state-transition integrity
 
-Not implemented yet:
+Current workflow scope is documented in the [Master Architecture Pack](KDP_PIPELINE_MASTER_ARCHITECTURE_PACK/README.md) and its [architecture index](docs/ARCHITECTURE_INDEX.md). Operational guides cover concepts, chapter work, editorial review, verification, builds, release preflight, and the local operator dashboard.
 
-- model providers
-- prompt registry
-- provenance records
-- planning templates
-- chapter drafting
-- continuity proposals
-- editorial passes
-- build/preflight/MCP
+## Architecture
+
+The repository now contains the **KDP Pipeline Master Architecture Pack**, the long-term source of truth for architecture decisions. New contributors and AI agents should read [AGENTS.md](AGENTS.md), then the [Architecture Pack README](KDP_PIPELINE_MASTER_ARCHITECTURE_PACK/README.md) and [Master Architecture Overview](KDP_PIPELINE_MASTER_ARCHITECTURE_PACK/01_Architecture/MASTER_ARCHITECTURE_OVERVIEW.md), before reading implementation code. The older detailed build specification remains available under `docs/architecture/` and is subordinate to the pack. See [docs/ARCHITECTURE_INDEX.md](docs/ARCHITECTURE_INDEX.md) for navigation.
+
+## Repository map
+
+```text
+AGENTS.md                              Agent instructions and documentation precedence
+KDP_PIPELINE_MASTER_ARCHITECTURE_PACK/ Long-term architecture, ADRs, and planned doc areas
+docs/architecture/                     Detailed architecture/build specification
+docs/operations/                       Operator workflows, sprint and pilot reports
+docs/research/                         Research references
+prompts/                               Versioned generation and analysis prompts
+src/kdp_pipeline/                      Python services, domain models, CLI, and storage
+tests/                                 Unit and integration tests
+projects/                              Local project/title artefacts and state snapshots
+```
 
 ## Setup
 

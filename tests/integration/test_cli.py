@@ -102,6 +102,10 @@ def test_verification_cli_groups_and_empty_inspection(tmp_path: Path):
     workspace_help = runner.invoke(app, ["workspace", "--help"])
     assert workspace_help.exit_code == 0
     assert "dashboard" in workspace_help.stdout
+    assert "serve" in workspace_help.stdout
+    serve_help = runner.invoke(app, ["workspace", "serve", "--help"])
+    assert serve_help.exit_code == 0
+    assert "127.0.0.1" in serve_help.stdout
     release_help = runner.invoke(app, ["release", "--help"])
     assert release_help.exit_code == 0
     assert "candidate" in release_help.stdout

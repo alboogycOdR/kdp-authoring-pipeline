@@ -8,6 +8,8 @@
 **Date:** 2026-09-24  
 **Operating model:** Local-first, AI-empowered, human-supervised publishing production system
 
+> **Current documentation hierarchy:** The [KDP Pipeline Master Architecture Pack](../../KDP_PIPELINE_MASTER_ARCHITECTURE_PACK/README.md) is the long-term architecture source of truth. This v1.0 build specification is a detailed historical implementation baseline and is subordinate to the pack. See the [architecture index](../ARCHITECTURE_INDEX.md).
+
 ---
 
 ## 0. Executive decision

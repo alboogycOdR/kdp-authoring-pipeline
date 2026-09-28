@@ -19,6 +19,7 @@ from kdp_pipeline.models.planning import PlanningArtifactKind, spec_for
 from kdp_pipeline.prompts import PromptRegistry
 from kdp_pipeline.providers import ModelProvider
 from kdp_pipeline.storage.audit import AuditEventWriter
+from kdp_pipeline.storage.approval_conditions import normalize_approval_conditions
 from kdp_pipeline.storage.db import (
     AssetRow,
     ApprovalRow,
@@ -254,11 +255,13 @@ def accept_chapter(
     reviewer: str,
     finding_ids: list[str] | None = None,
     proposal_ids: list[str] | None = None,
+    conditions: list[str] | None = None,
 ) -> ChapterAcceptanceResult:
     if chapter_number < 1:
         raise ChapterAcceptanceError("chapter_number must be positive")
     if not reviewer.strip():
         raise ChapterAcceptanceError("reviewer is required")
+    conditions = normalize_approval_conditions(conditions)
     destination: Path | None = None
     copied = False
     try:
@@ -328,7 +331,7 @@ def accept_chapter(
             approval = ApprovalRow(
                 approval_id=new_id("APR"), title_id=source.title_id, asset_id=accepted.asset_id,
                 scope=f"chapter.{chapter_number}", candidate_hash=output_hash, approver=reviewer,
-                decision="accepted", conditions_json="[]", created_at=utcnow(),
+                decision="accepted", conditions_json=json.dumps(conditions), created_at=utcnow(),
             )
             accepted_provenance = ProvenanceRow(
                 provenance_id=new_id("PROV"), asset_id=accepted.asset_id, job_id=None,
@@ -355,7 +358,7 @@ def accept_chapter(
                 "source_asset_id": source.asset_id, "source_path": str(source_path),
                 "destination_path": str(destination), "approval_id": approval.approval_id,
                 "reviewer": reviewer, "finding_ids": finding_ids or [], "proposal_ids": proposal_ids or [],
-                "provenance_id": accepted_provenance.provenance_id,
+                "provenance_id": accepted_provenance.provenance_id, "conditions": conditions,
             }
             AuditEventWriter.append(session, actor_id=reviewer, action="chapter.accepted", entity_type="asset", entity_id=accepted.asset_id,
                                     correlation_id=source.title_id, result="success", before_hash=source.sha256, after_hash=output_hash, metadata=metadata)

@@ -20,6 +20,7 @@ from kdp_pipeline.inspection import doctor as run_doctor, inspect_title
 from kdp_pipeline.verification import (add_verification_flag, decide_rights_record,
     decide_verification, record_rights, scan_scripture_placeholders)
 from kdp_pipeline.workspace import generate_dashboard
+from kdp_pipeline.workspace.server import create_workspace_server
 from kdp_pipeline.models.planning import PlanningArtifactKind
 from kdp_pipeline.planning import PlanningService, accept_planning_artifact
 from kdp_pipeline.release import (create_release_candidate, export_release_packet,
@@ -1013,6 +1014,27 @@ def workspace_dashboard(output: Path | None = typer.Option(None, "--output"),
         raise typer.Exit(code=2)
     typer.echo(json.dumps({"output_path": str(result.output_path),
         "project_count": result.project_count, "title_count": result.title_count}))
+
+
+@workspace_app.command("serve")
+def workspace_serve(
+    port: int = typer.Option(8765, min=1, max=65535, help="Local port; the server binds only to 127.0.0.1"),
+    root: Path | None = typer.Option(None, help="Repository root containing .kdp/state.db"),
+):
+    """Serve the local operator workspace on loopback."""
+    server = None
+    try:
+        server = create_workspace_server(_root(root), port=port)
+        typer.echo(f"Workspace available at http://127.0.0.1:{server.server_address[1]}/ (Ctrl+C to stop)")
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    except (OSError, ValueError) as e:
+        typer.echo(f"Error starting local workspace: {e}", err=True)
+        raise typer.Exit(code=2)
+    finally:
+        if server is not None:
+            server.server_close()
 
 
 if __name__ == "__main__":

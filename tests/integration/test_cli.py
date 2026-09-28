@@ -58,6 +58,22 @@ def test_cli_inspection_and_read_only_doctor(tmp_path: Path):
     assert (tmp_path / ".kdp" / "state.db").read_bytes() == db_before
 
 
+def test_empty_pricing_list_guides_operator_without_inventing_rates(tmp_path: Path):
+    result = runner.invoke(app, ["init-project", "Pricing CLI", "--root", str(tmp_path)])
+    assert result.exit_code == 0, result.output
+
+    result = runner.invoke(app, [
+        "pricing", "list", "--provider-id", "openai-main-authoring-low", "--root", str(tmp_path)
+    ])
+
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout) == []
+    assert "usage costs will remain unknown" in result.output
+    assert "Confirm the current official rates for the exact provider and model" in result.output
+    assert "kdp pricing set PROVIDER_ID MODEL" in result.output
+    assert "--input-usd-per-million INPUT_RATE" in result.output
+
+
 def test_verification_cli_groups_and_empty_inspection(tmp_path: Path):
     project_id = runner.invoke(app, ["init-project", "Verification CLI", "--root", str(tmp_path)]).stdout.strip()
     title_id = runner.invoke(app, ["new-title", project_id, "Verification Title", "--root", str(tmp_path)]).stdout.strip()

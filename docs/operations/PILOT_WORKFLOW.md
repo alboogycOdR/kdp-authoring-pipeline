@@ -14,6 +14,28 @@ Use Python 3.12 from `.venv` and verify the CLI:
 
 `kdp doctor` is read-only. It reports problems and recommended human action; it does not repair them.
 
+## Provider and pricing readiness
+
+Inspect configured profiles and check configuration without connecting to a provider:
+
+```powershell
+kdp providers list
+kdp providers show PROVIDER_ID
+kdp providers check PROVIDER_ID
+kdp pricing list --provider-id PROVIDER_ID
+kdp inspect provider TITLE_ID
+kdp inspect usage TITLE_ID
+kdp inspect budget TITLE_ID
+```
+
+An empty pricing list means usage cost remains unknown; it does not mean provider use is free.
+Before configuring rates, the operator must confirm current official pricing for the exact
+provider and model. Then use `kdp pricing set PROVIDER_ID MODEL --input-usd-per-million RATE
+--output-usd-per-million RATE`, optionally adding `--cached-input-usd-per-million RATE` when
+the provider's current pricing supports it. Never estimate or infer pricing. Review unknown
+historical usage separately because adding rates does not retroactively establish the exact
+cost of older requests.
+
 ## Operator workflow
 
 Create a project and title:

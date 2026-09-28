@@ -156,6 +156,19 @@ class EditorialFindingRow(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
+class RevisionRecommendationRow(Base):
+    __tablename__ = "revision_recommendations"
+    recommendation_id: Mapped[str] = mapped_column(String, primary_key=True)
+    title_id: Mapped[str] = mapped_column(ForeignKey("titles.title_id"), nullable=False)
+    chapter_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    source_asset_id: Mapped[str] = mapped_column(ForeignKey("assets.asset_id"), nullable=False)
+    finding_ids_json: Mapped[str] = mapped_column(Text, default="[]")
+    recommendation: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String, nullable=False, default="open")
+    owner: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class CanonProposalRow(Base):
     __tablename__ = "canon_proposals"
     proposal_id: Mapped[str] = mapped_column(String, primary_key=True)

@@ -16,7 +16,7 @@ from kdp_pipeline.models.planning import PlanningArtifactKind, spec_for
 from kdp_pipeline.continuity.service import ContinuityOutputInvalid, _validate_output
 from kdp_pipeline.storage.db import (
     AssetRow, ApprovalRow, AuditEventRow, CanonProposalRow, ChapterQueueRow, ConceptGateRow, EditorialFindingRow,
-    JobRow, ProjectRow, ProvenanceRow, TitleRow,
+    JobRow, ProjectRow, ProvenanceRow, RevisionRecommendationRow, TitleRow,
     ProviderProfileRow, ProjectProviderSelectionRow, ProjectBudgetRow,
     UsageEventRow, BudgetReservationRow, ModelPricingRow,
 )
@@ -38,6 +38,11 @@ REQUIRED_PROMPTS = (
     "drafting/chapter-revise-v1.0.md",
     "continuity/chapter-continuity-v1.0.md",
     "editorial/developmental-v1.0.md",
+    "editorial/voice-v1.0.md",
+    "editorial/line-v1.0.md",
+    "editorial/copy-v1.0.md",
+    "editorial/reader-experience-v1.0.md",
+    "editorial/consistency-v1.0.md",
 )
 
 
@@ -75,6 +80,9 @@ def inspect_title(root: Path, title_id: str) -> dict:
         approvals = list(session.scalars(select(ApprovalRow).where(ApprovalRow.title_id == title_id).order_by(ApprovalRow.created_at)))
         findings = list(session.scalars(select(EditorialFindingRow).where(EditorialFindingRow.title_id == title_id).order_by(EditorialFindingRow.created_at)))
         proposals = list(session.scalars(select(CanonProposalRow).where(CanonProposalRow.title_id == title_id).order_by(CanonProposalRow.created_at)))
+        revision_recommendations = (list(session.scalars(select(RevisionRecommendationRow).where(
+            RevisionRecommendationRow.title_id == title_id).order_by(RevisionRecommendationRow.created_at)))
+            if "revision_recommendations" in existing_tables else [])
         continuity_audits = list(session.scalars(select(AuditEventRow).where(
             AuditEventRow.action.in_(["continuity.output.validated", "continuity.output.rejected"]))))
         continuity_audits_by_job = {row.entity_id: row for row in continuity_audits}
@@ -336,6 +344,18 @@ def inspect_title(root: Path, title_id: str) -> dict:
             "approvals": [{"approval_id": row.approval_id, "asset_id": row.asset_id, "scope": row.scope, "decision": row.decision, "approver": row.approver} for row in approvals],
             "findings": [{"finding_id": row.finding_id, "asset_id": row.asset_id, "pass_type": row.pass_type, "status": row.status, "snapshot_path": row.snapshot_path} for row in findings],
             "proposals": [{"proposal_id": row.proposal_id, "finding_id": row.finding_id, "status": row.status, "snapshot_path": row.snapshot_path} for row in proposals],
+            "editorial": {"analyses": [{"asset_id": a.asset_id, "asset_type": a.asset_type,
+                           "approval_status": a.approval_status, "source_ref": a.source_ref, "path": a.path}
+                          for a in assets if a.asset_type.startswith("analysis.editorial.")],
+                          "findings_by_pass": {pass_type: [f.finding_id for f in findings if f.pass_type == pass_type]
+                                               for pass_type in sorted({f.pass_type for f in findings})},
+                          "rejected_outputs": [{"job_id": e.entity_id, "metadata": json.loads(e.metadata_json or "{}")}
+                                               for e in audit if e.action == "editorial.output.rejected"],
+                          "revision_recommendations": [{"recommendation_id": r.recommendation_id,
+                              "chapter_number": r.chapter_number, "source_asset_id": r.source_asset_id,
+                              "finding_ids": json.loads(r.finding_ids_json or "[]"), "status": r.status,
+                              "owner": r.owner, "recommendation": r.recommendation}
+                              for r in revision_recommendations]},
             "continuity": {"runs": continuity_runs, "warnings": continuity_warnings,
                            "findings_from_invalid_analysis": [row.finding_id for row in findings if row.asset_id in invalid_continuity_asset_ids and row.pass_type == "continuity"],
                            "proposals_from_invalid_analysis": [row.proposal_id for row in proposals if row.finding_id and any(f.finding_id == row.finding_id and f.asset_id in invalid_continuity_asset_ids for f in findings)]},

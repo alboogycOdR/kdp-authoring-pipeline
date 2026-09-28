@@ -14,6 +14,7 @@ from kdp_pipeline.core.state_machine import TitleState
 from kdp_pipeline.chapter import ChapterService, accept_chapter
 from kdp_pipeline.continuity import ContinuityService, approve_canon_proposal
 from kdp_pipeline.editorial import EditorialService
+from kdp_pipeline.editorial import StructuredEditorialService, create_revision_recommendation
 from kdp_pipeline.inspection import doctor as run_doctor, inspect_title
 from kdp_pipeline.models.planning import PlanningArtifactKind
 from kdp_pipeline.planning import PlanningService, accept_planning_artifact
@@ -611,15 +612,33 @@ def chapter_continuity(title_id: str, chapter_number: int, asset_id: str = typer
 
 @editorial_app.command("run")
 def editorial_run(title_id: str, chapter_number: int, asset_id: str = typer.Option(...), pass_name: str = typer.Option("developmental", "--pass"), root: Path | None = typer.Option(None)):
-    if pass_name != "developmental":
-        typer.echo("Error: only the developmental pass is implemented in Sprint 4", err=True)
-        raise typer.Exit(code=2)
     try:
-        result = _run_chapter(_root(root), title_id, chapter_number, "editorial", asset_id=asset_id)
+        if pass_name == "developmental":
+            result = _run_chapter(_root(root), title_id, chapter_number, "editorial", asset_id=asset_id)
+            typer.echo(json.dumps({"finding_id": result.finding.finding_id, "analysis_asset_id": result.generation.asset.asset_id}))
+            return
+        result = asyncio.run(StructuredEditorialService.analyze(_root(root), title_id=title_id,
+            chapter_number=chapter_number, source_asset_id=asset_id, pass_type=pass_name))
     except (OSError, ValueError, RuntimeError) as e:
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(code=2)
-    typer.echo(json.dumps({"finding_id": result.finding.finding_id, "analysis_asset_id": result.generation.asset.asset_id}))
+    typer.echo(json.dumps({"job_id": result.generation.job.job_id, "analysis_asset_id": result.generation.asset.asset_id,
+        "pass_type": pass_name, "status": result.output.status,
+        "findings": [finding.finding_id for finding in result.findings]}))
+
+
+@editorial_app.command("recommend")
+def editorial_recommend(title_id: str, chapter_number: int, asset_id: str = typer.Option(...),
+                        finding_ids: list[str] = typer.Option(..., "--finding-id"), owner: str = typer.Option(...),
+                        root: Path | None = typer.Option(None)):
+    try:
+        result = create_revision_recommendation(_root(root), title_id=title_id, chapter_number=chapter_number,
+            source_asset_id=asset_id, finding_ids=finding_ids, owner=owner)
+        typer.echo(json.dumps({"recommendation_id": result.recommendation_id, "status": result.status,
+                               "finding_ids": finding_ids}))
+    except (OSError, ValueError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
 
 
 @chapter_app.command("revise")
@@ -692,6 +711,15 @@ def inspect_assets(title_id: str, root: Path | None = typer.Option(None)):
 def inspect_concept(title_id: str, root: Path | None = typer.Option(None)):
     try:
         _print_inspection(title_id, _root(root), "concept")
+    except (OSError, ValueError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
+
+
+@inspect_app.command("editorial")
+def inspect_editorial(title_id: str, root: Path | None = typer.Option(None)):
+    try:
+        _print_inspection(title_id, _root(root), "editorial")
     except (OSError, ValueError) as e:
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(code=2)

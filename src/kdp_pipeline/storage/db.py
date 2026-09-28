@@ -209,6 +209,22 @@ class RightsLogRow(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
+class ManuscriptBuildRow(Base):
+    __tablename__ = "manuscript_builds"
+    build_id: Mapped[str] = mapped_column(String, primary_key=True)
+    title_id: Mapped[str] = mapped_column(ForeignKey("titles.title_id"), nullable=False)
+    asset_id: Mapped[str] = mapped_column(ForeignKey("assets.asset_id"), nullable=False)
+    status: Mapped[str] = mapped_column(String, nullable=False)
+    output_format: Mapped[str] = mapped_column(String, nullable=False, default="markdown")
+    output_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    manifest_path: Mapped[str] = mapped_column(Text, nullable=False)
+    manifest_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    included_assets_json: Mapped[str] = mapped_column(Text, default="[]")
+    blockers_json: Mapped[str] = mapped_column(Text, default="[]")
+    created_by: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class CanonProposalRow(Base):
     __tablename__ = "canon_proposals"
     proposal_id: Mapped[str] = mapped_column(String, primary_key=True)

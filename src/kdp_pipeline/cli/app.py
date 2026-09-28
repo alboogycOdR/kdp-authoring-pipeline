@@ -12,6 +12,7 @@ from kdp_pipeline.concept import (ConceptService, accept_concept, enable_concept
 from kdp_pipeline.chapters import chapter_status, queue_chapters, record_chapter_summary, resume_queue, stop_queue
 from kdp_pipeline.core.state_machine import TitleState
 from kdp_pipeline.chapter import ChapterService, accept_chapter
+from kdp_pipeline.build import accept_matter, build_manuscript, register_matter
 from kdp_pipeline.continuity import ContinuityService, approve_canon_proposal
 from kdp_pipeline.editorial import EditorialService
 from kdp_pipeline.editorial import StructuredEditorialService, create_revision_recommendation
@@ -59,6 +60,7 @@ concept_app = typer.Typer(help="Develop and validate book concepts")
 chapters_app = typer.Typer(help="Queue and inspect bounded chapter work")
 verification_app = typer.Typer(help="Track Scripture, source, and expert verification")
 rights_app = typer.Typer(help="Track rights and licensing review")
+build_app = typer.Typer(help="Assemble accepted manuscript assets")
 app.add_typer(positioning_app, name="positioning")
 app.add_typer(brief_app, name="brief")
 app.add_typer(outline_app, name="outline")
@@ -75,6 +77,7 @@ app.add_typer(concept_app, name="concept")
 app.add_typer(chapters_app, name="chapters")
 app.add_typer(verification_app, name="verify")
 app.add_typer(rights_app, name="rights")
+app.add_typer(build_app, name="build")
 
 
 def _root(root: Path | None) -> Path:
@@ -717,6 +720,44 @@ def rights_decide(rights_record_id: str, decision: str, reviewer: str = typer.Op
     typer.echo(json.dumps({"rights_record_id": row.rights_record_id, "status": row.status}))
 
 
+@build_app.command("manuscript")
+def manuscript_build(title_id: str, builder: str = typer.Option("cli-user"),
+                     root: Path | None = typer.Option(None)):
+    try:
+        result = build_manuscript(_root(root), title_id=title_id, builder=builder)
+    except (OSError, ValueError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
+    typer.echo(json.dumps({"build_id": result.build.build_id, "asset_id": result.asset.asset_id,
+        "status": result.build.status, "path": result.asset.path,
+        "manifest_path": result.build.manifest_path, "blocker_count": len(result.manifest["blockers"])}))
+
+
+@build_app.command("matter-add")
+def manuscript_matter_add(title_id: str, section: str, source_file: Path,
+                          creator: str = typer.Option(...), root: Path | None = typer.Option(None)):
+    try:
+        row = register_matter(_root(root), title_id=title_id, section=section,
+            source_path=source_file, creator=creator)
+    except (OSError, ValueError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
+    typer.echo(json.dumps({"asset_id": row.asset_id, "asset_type": row.asset_type,
+                           "approval_status": row.approval_status, "path": row.path}))
+
+
+@build_app.command("matter-accept")
+def manuscript_matter_accept(asset_id: str, reviewer: str = typer.Option(...),
+                             root: Path | None = typer.Option(None)):
+    try:
+        asset, approval = accept_matter(_root(root), asset_id, reviewer=reviewer)
+    except (OSError, ValueError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
+    typer.echo(json.dumps({"asset_id": asset.asset_id, "approval_id": approval.approval_id,
+                           "path": asset.path}))
+
+
 @chapter_app.command("revise")
 def chapter_revise(title_id: str, chapter_number: int, asset_id: str = typer.Option(...), root: Path | None = typer.Option(None)):
     try:
@@ -805,6 +846,15 @@ def inspect_editorial(title_id: str, root: Path | None = typer.Option(None)):
 def inspect_verification(title_id: str, root: Path | None = typer.Option(None)):
     try:
         _print_inspection(title_id, _root(root), "verification")
+    except (OSError, ValueError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
+
+
+@inspect_app.command("builds")
+def inspect_builds(title_id: str, root: Path | None = typer.Option(None)):
+    try:
+        _print_inspection(title_id, _root(root), "builds")
     except (OSError, ValueError) as e:
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(code=2)

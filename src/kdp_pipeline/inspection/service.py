@@ -16,7 +16,7 @@ from kdp_pipeline.models.planning import PlanningArtifactKind, spec_for
 from kdp_pipeline.continuity.service import ContinuityOutputInvalid, _validate_output
 from kdp_pipeline.storage.db import (
     AssetRow, ApprovalRow, AuditEventRow, CanonProposalRow, ChapterQueueRow, ConceptGateRow, EditorialFindingRow,
-    JobRow, ProjectRow, ProvenanceRow, RevisionRecommendationRow, TitleRow,
+    JobRow, ManuscriptBuildRow, ProjectRow, ProvenanceRow, RevisionRecommendationRow, TitleRow,
     ProviderProfileRow, ProjectProviderSelectionRow, ProjectBudgetRow, RightsLogRow, VerificationItemRow,
     UsageEventRow, BudgetReservationRow, ModelPricingRow,
 )
@@ -27,7 +27,7 @@ REQUIRED_TABLES = {
     "projects", "titles", "assets", "jobs", "provenance", "approvals",
     "editorial_findings", "canon_proposals", "audit_events",
     "provider_profiles", "project_provider_selections", "model_pricing",
-    "project_budgets", "budget_reservations", "usage_events", "verification_items", "rights_log",
+    "project_budgets", "budget_reservations", "usage_events", "verification_items", "rights_log", "manuscript_builds",
 }
 REQUIRED_PROMPTS = (
     "planning/positioning-brief-v1.0.md",
@@ -89,6 +89,9 @@ def inspect_title(root: Path, title_id: str) -> dict:
         rights_records = (list(session.scalars(select(RightsLogRow).where(
             RightsLogRow.title_id == title_id).order_by(RightsLogRow.created_at)))
             if "rights_log" in existing_tables else [])
+        manuscript_builds = (list(session.scalars(select(ManuscriptBuildRow).where(
+            ManuscriptBuildRow.title_id == title_id).order_by(ManuscriptBuildRow.created_at)))
+            if "manuscript_builds" in existing_tables else [])
         continuity_audits = list(session.scalars(select(AuditEventRow).where(
             AuditEventRow.action.in_(["continuity.output.validated", "continuity.output.rejected"]))))
         continuity_audits_by_job = {row.entity_id: row for row in continuity_audits}
@@ -244,6 +247,14 @@ def inspect_title(root: Path, title_id: str) -> dict:
         inconsistencies = [check for asset in assets if not (check := _file_check(asset))["hash_matches"]]
         inconsistencies += [{"asset_id": asset.asset_id, "issue": "missing provenance"} for asset in assets if asset.creator_type == "ai" and not any(item.asset_id == asset.asset_id for item in provenance)]
         inconsistencies += [{"asset_id": asset.asset_id, "issue": "accepted asset missing approval"} for asset in assets if asset.approval_status == "accepted" and not any(item.asset_id == asset.asset_id and item.decision == "accepted" for item in approvals)]
+        assets_by_id = {asset.asset_id: asset for asset in assets}
+        for build in manuscript_builds:
+            output = assets_by_id.get(build.asset_id)
+            output_ok = output is not None and Path(output.path).is_file() and sha256_file(Path(output.path)) == build.output_sha256 == output.sha256
+            manifest_path = Path(build.manifest_path)
+            manifest_ok = manifest_path.is_file() and sha256_file(manifest_path) == build.manifest_sha256
+            if not output_ok or not manifest_ok:
+                inconsistencies.append({"build_id": build.build_id, "issue": "build output or manifest is missing or has a hash mismatch"})
         continuity_runs = []
         invalid_continuity_asset_ids = set()
         continuity_warnings = []
@@ -286,6 +297,16 @@ def inspect_title(root: Path, title_id: str) -> dict:
                                   "accepted_chapter_assets": [asset.asset_id for asset in accepted_chapters], "accepted_chapter_count": len(accepted_chapters)},
             "chapter_workflow": chapter_workflow,
             "assets": [{"asset_id": asset.asset_id, "asset_type": asset.asset_type, "path": asset.path, "sha256": asset.sha256, "approval_status": asset.approval_status, "source_ref": asset.source_ref} for asset in assets],
+            "builds": {"records": [{"build_id": build.build_id, "asset_id": build.asset_id,
+                "status": build.status, "output_format": build.output_format,
+                "output_sha256": build.output_sha256, "manifest_path": build.manifest_path,
+                "manifest_sha256": build.manifest_sha256,
+                "included_assets": json.loads(build.included_assets_json or "[]"),
+                "blockers": json.loads(build.blockers_json or "[]"),
+                "created_by": build.created_by,
+                "output_exists": bool(assets_by_id.get(build.asset_id) and Path(assets_by_id[build.asset_id].path).is_file()),
+                "manifest_exists": Path(build.manifest_path).is_file()}
+                for build in manuscript_builds]},
             "jobs": [{"job_id": job.job_id, "job_type": job.job_type, "status": job.status,
                       "error": job.error, "idempotency_key": job.idempotency_key,
                       "request_diagnostics": request_diagnostics_by_job.get(job.job_id),

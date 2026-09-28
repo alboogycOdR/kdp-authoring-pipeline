@@ -4,7 +4,7 @@ from pathlib import Path
 
 import httpx
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import func, inspect, select
 from typer.testing import CliRunner
 
 from kdp_pipeline.context import ContextManifest
@@ -33,6 +33,7 @@ def test_provider_profiles_selection_toggle_and_no_implicit_fallback(tmp_path):
     project = create_project(tmp_path, "Profile project")
     add_provider_profile(tmp_path, profile())
     assert list_provider_profiles(tmp_path)[0]["api_key_configured"] is False
+    assert list_provider_profiles(tmp_path)[0]["reasoning_effort"] is None
     with pytest.raises(ValueError, match="No provider is selected"):
         resolve_project_provider(tmp_path, project.project_id)
     select_provider_for_project(tmp_path, project.project_id, "pilot")
@@ -54,6 +55,50 @@ def test_openai_gpt5_profile_does_not_supply_unsupported_temperature(tmp_path, m
     provider = resolve_project_provider(tmp_path, project.project_id)
     assert provider.default_temperature is None
     assert provider.uses_openai_reasoning_defaults is True
+
+
+def test_provider_profile_persists_and_resolves_reasoning_effort(tmp_path, monkeypatch):
+    monkeypatch.setenv("PILOT_OPENAI_KEY", "test-key-value")
+    project = create_project(tmp_path, "Reasoning config project")
+    added = add_provider_profile(tmp_path, ProviderProfileSettings(
+        provider_id="gpt5-low", provider_type="openai-compatible", display_name="GPT-5 low",
+        model="gpt-5", base_url="https://api.openai.com/v1", api_key_env="PILOT_OPENAI_KEY",
+        reasoning_effort="low",
+    ))
+    assert added["reasoning_effort"] == "low"
+    select_provider_for_project(tmp_path, project.project_id, "gpt5-low")
+    provider = resolve_project_provider(tmp_path, project.project_id)
+    assert provider.config.reasoning_effort == "low"
+    assert provider.config_hash
+
+
+def test_reasoning_effort_cli_accepts_known_value_and_rejects_unknown(tmp_path):
+    runner = CliRunner()
+    valid = runner.invoke(app, ["providers", "add-openai-compatible", "gpt5-low", "GPT-5 low", "gpt-5",
+                                "--reasoning-effort", "low", "--root", str(tmp_path)])
+    assert valid.exit_code == 0, valid.output
+    assert json.loads(valid.output)["reasoning_effort"] == "low"
+    for invalid_effort in ("xhigh", "medium", "high"):
+        invalid = runner.invoke(app, ["providers", "add-openai-compatible", f"gpt5-bad-{invalid_effort}",
+                                      "GPT-5 bad", "gpt-5", "--reasoning-effort", invalid_effort,
+                                      "--root", str(tmp_path)])
+        assert invalid.exit_code == 2
+        assert "reasoning_effort" in invalid.output
+
+
+def test_init_db_adds_reasoning_column_to_existing_workspace(tmp_path):
+    create_project(tmp_path, "Legacy provider schema")
+    from kdp_pipeline.storage.db import engine_for, init_db
+    engine = engine_for(tmp_path)
+    try:
+        with engine.begin() as connection:
+            connection.exec_driver_sql("ALTER TABLE provider_profiles DROP COLUMN reasoning_effort")
+    finally:
+        engine.dispose()
+    init_db(tmp_path)
+    with session_scope(tmp_path) as session:
+        columns = {column["name"] for column in inspect(session.bind).get_columns("provider_profiles")}
+    assert "reasoning_effort" in columns
 
 
 def test_generation_without_project_selection_fails_without_fake_fallback(tmp_path):

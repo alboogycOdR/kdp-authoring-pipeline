@@ -38,6 +38,7 @@ def _profile_dict(row: ProviderProfileRow, selected_for: list[str]) -> dict:
         "api_key_env": row.api_key_env,
         "default_max_output_tokens": row.default_max_output_tokens,
         "default_temperature": row.default_temperature,
+        "reasoning_effort": row.reasoning_effort,
         "priority": row.priority,
         "notes": row.notes,
         "metadata": json.loads(row.metadata_json or "{}"),
@@ -104,6 +105,7 @@ def add_provider_profile(root: Path, settings: ProviderProfileSettings) -> dict:
             api_key_env=settings.api_key_env,
             default_max_output_tokens=settings.default_max_output_tokens,
             default_temperature=settings.default_temperature,
+            reasoning_effort=settings.reasoning_effort,
             priority=settings.priority,
             notes=settings.notes,
             metadata_json=json.dumps(settings.metadata, ensure_ascii=False, sort_keys=True),
@@ -179,7 +181,8 @@ def resolve_project_provider(root: Path, project_id: str):
             provider_id=row.provider_id, provider_type=row.provider_type, display_name=row.display_name,
             enabled=row.enabled, base_url=row.base_url, model=row.model, api_key_env=row.api_key_env,
             default_max_output_tokens=row.default_max_output_tokens,
-            default_temperature=row.default_temperature, priority=row.priority,
+            default_temperature=row.default_temperature, reasoning_effort=row.reasoning_effort,
+            priority=row.priority,
             notes=row.notes, metadata=json.loads(row.metadata_json or "{}"),
         )
     if config.provider_type == "fake":
@@ -191,6 +194,7 @@ def resolve_project_provider(root: Path, project_id: str):
             base_url=config.base_url or "https://api.openai.com/v1",
             model=config.model,
             api_key_env=config.api_key_env or "OPENAI_API_KEY",
+            reasoning_effort=config.reasoning_effort,
         ))
     provider.profile_id = config.provider_id
     provider.config_hash = sha256_bytes(canonical_json_bytes({
@@ -200,6 +204,7 @@ def resolve_project_provider(root: Path, project_id: str):
         "api_key_env": config.api_key_env,
         "default_max_output_tokens": config.default_max_output_tokens,
         "default_temperature": config.default_temperature,
+        "reasoning_effort": config.reasoning_effort,
     }))
     provider.default_max_output_tokens = config.default_max_output_tokens
     provider.default_temperature = (

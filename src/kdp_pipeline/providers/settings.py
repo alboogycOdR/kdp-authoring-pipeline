@@ -22,6 +22,7 @@ class ProviderProfileSettings(BaseModel):
     api_key_env: str | None = None
     default_max_output_tokens: int = Field(default=1200, gt=0)
     default_temperature: float | None = Field(default=0.0, ge=0, le=2)
+    reasoning_effort: Literal["minimal", "low"] | None = None
     priority: int | None = None
     notes: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
@@ -60,8 +61,8 @@ class ProviderProfileSettings(BaseModel):
         if self.provider_type == "openai-compatible" and not self.base_url:
             self.base_url = "https://api.openai.com/v1"
         if self.provider_type == "fake":
-            if self.api_key_env or self.base_url:
-                raise ValueError("fake providers do not use base_url or api_key_env")
+            if self.api_key_env or self.base_url or self.reasoning_effort:
+                raise ValueError("fake providers do not use base_url, api_key_env, or reasoning_effort")
         elif self.api_key_env is None:
             host = urlparse(self.base_url or "").hostname or ""
             loopback = host == "localhost"

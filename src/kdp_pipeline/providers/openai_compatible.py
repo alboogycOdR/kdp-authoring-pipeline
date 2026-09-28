@@ -5,6 +5,7 @@ import ipaddress
 import os
 import re
 import time
+from typing import Literal
 from urllib.parse import urlparse
 
 import httpx
@@ -51,6 +52,7 @@ class OpenAICompatibleConfig(BaseModel):
     model: str = Field(min_length=1)
     api_key_env: str | None = Field(default="OPENAI_API_KEY", min_length=1)
     timeout_seconds: float = Field(default=60.0, gt=0)
+    reasoning_effort: Literal["minimal", "low"] | None = None
 
     @field_validator("base_url")
     @classmethod
@@ -127,6 +129,8 @@ class OpenAICompatibleProvider:
             ],
             token_limit_field: request.max_output_tokens,
         }
+        if self.uses_openai_reasoning_defaults and self.config.reasoning_effort is not None:
+            payload["reasoning_effort"] = self.config.reasoning_effort
         if request.temperature is not None and not self.uses_openai_reasoning_defaults:
             payload["temperature"] = request.temperature
         if request.structured_output_schema is not None:

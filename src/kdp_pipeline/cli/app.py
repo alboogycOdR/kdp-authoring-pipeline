@@ -307,6 +307,7 @@ def providers_add_openai_compatible(
     api_key_env: str = typer.Option("OPENAI_API_KEY"),
     max_output_tokens: int = typer.Option(1200, min=1),
     temperature: float = typer.Option(0.0, min=0.0, max=2.0),
+    reasoning_effort: str | None = typer.Option(None, help="Lower reasoning effort for supported official OpenAI reasoning models: minimal or low."),
     priority: int | None = typer.Option(None),
     root: Path | None = typer.Option(None),
 ):
@@ -314,7 +315,8 @@ def providers_add_openai_compatible(
         profile = ProviderProfileSettings(
             provider_id=provider_id, provider_type="openai-compatible", display_name=display_name,
             model=model, base_url=base_url, api_key_env=api_key_env,
-            default_max_output_tokens=max_output_tokens, default_temperature=temperature, priority=priority,
+            default_max_output_tokens=max_output_tokens, default_temperature=temperature,
+            reasoning_effort=reasoning_effort, priority=priority,
         )
         typer.echo(json.dumps(add_provider_profile(_root(root), profile), indent=2))
     except (OSError, ValueError) as exc:

@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import NullPool
 
 from kdp_pipeline.models.planning import PlanningArtifactKind, spec_for
+from kdp_pipeline.continuity.service import ContinuityOutputInvalid, _validate_output
 from kdp_pipeline.storage.db import (
     AssetRow, ApprovalRow, AuditEventRow, CanonProposalRow, EditorialFindingRow,
     JobRow, ProjectRow, ProvenanceRow, TitleRow,
@@ -72,6 +73,9 @@ def inspect_title(root: Path, title_id: str) -> dict:
         approvals = list(session.scalars(select(ApprovalRow).where(ApprovalRow.title_id == title_id).order_by(ApprovalRow.created_at)))
         findings = list(session.scalars(select(EditorialFindingRow).where(EditorialFindingRow.title_id == title_id).order_by(EditorialFindingRow.created_at)))
         proposals = list(session.scalars(select(CanonProposalRow).where(CanonProposalRow.title_id == title_id).order_by(CanonProposalRow.created_at)))
+        continuity_audits = list(session.scalars(select(AuditEventRow).where(
+            AuditEventRow.action.in_(["continuity.output.validated", "continuity.output.rejected"]))))
+        continuity_audits_by_job = {row.entity_id: row for row in continuity_audits}
         provenance = [row for asset in assets if (row := session.scalar(select(ProvenanceRow).where(ProvenanceRow.asset_id == asset.asset_id)))]
         selection = session.get(ProjectProviderSelectionRow, title.project_id)
         provider = session.get(ProviderProfileRow, selection.provider_id) if selection and selection.provider_id else None
@@ -141,6 +145,38 @@ def inspect_title(root: Path, title_id: str) -> dict:
         inconsistencies = [check for asset in assets if not (check := _file_check(asset))["hash_matches"]]
         inconsistencies += [{"asset_id": asset.asset_id, "issue": "missing provenance"} for asset in assets if asset.creator_type == "ai" and not any(item.asset_id == asset.asset_id for item in provenance)]
         inconsistencies += [{"asset_id": asset.asset_id, "issue": "accepted asset missing approval"} for asset in assets if asset.approval_status == "accepted" and not any(item.asset_id == asset.asset_id and item.decision == "accepted" for item in approvals)]
+        continuity_runs = []
+        invalid_continuity_asset_ids = set()
+        continuity_warnings = []
+        for job in jobs:
+            if not job.job_type.startswith("generate:chapter.continuity."):
+                continue
+            result_ids = json.loads(job.result_asset_ids_json or "[]")
+            analysis = next((asset for asset in assets if asset.asset_id in result_ids), None)
+            prov = next((item for item in provenance if analysis and item.asset_id == analysis.asset_id), None)
+            run_audit = continuity_audits_by_job.get(job.job_id)
+            valid = False
+            try:
+                if analysis and Path(analysis.path).is_file():
+                    _validate_output(Path(analysis.path).read_text(encoding="utf-8"))
+                    valid = True
+            except (ContinuityOutputInvalid, UnicodeDecodeError, OSError):
+                valid = False
+            refs = json.loads(prov.input_references_json) if prov else []
+            ref_assets = [next((asset for asset in assets if asset.asset_id == ref), None) for ref in refs]
+            context_kinds = {asset.asset_type for asset in ref_assets if asset is not None}
+            required_kinds = {"chapter.draft", "planning.positioning", "planning.book-brief", "planning.outline", "planning.chapter-card"}
+            required_context = required_kinds.issubset(context_kinds) and run_audit is not None and run_audit.action == "continuity.output.validated"
+            invalid = not valid or not required_context or (run_audit is not None and run_audit.action == "continuity.output.rejected")
+            if invalid and analysis:
+                invalid_continuity_asset_ids.add(analysis.asset_id)
+            continuity_runs.append({"job_id": job.job_id, "analysis_asset_id": analysis.asset_id if analysis else None,
+                "required_context_present": required_context, "output_valid": valid,
+                "status": "valid" if valid and required_context else "invalid_or_unverified",
+                "findings_from_invalid_analysis": ([row.finding_id for row in findings if row.asset_id == (analysis.asset_id if analysis else None) and row.pass_type == "continuity"] if invalid else []),
+                "proposals_from_invalid_analysis": ([row.proposal_id for row in proposals if row.finding_id and any(f.finding_id == row.finding_id and f.asset_id == (analysis.asset_id if analysis else None) for f in findings)] if invalid else [])})
+            if invalid or not required_context:
+                continuity_warnings.append(f"Continuity attempt {job.job_id} is unusable or unverified; its findings/proposals require human review.")
         project_data = {"project_id": project.project_id, "name": project.name, "status": project.status} if project else None
         return {
             "project": project_data,
@@ -212,6 +248,9 @@ def inspect_title(root: Path, title_id: str) -> dict:
             "approvals": [{"approval_id": row.approval_id, "asset_id": row.asset_id, "scope": row.scope, "decision": row.decision, "approver": row.approver} for row in approvals],
             "findings": [{"finding_id": row.finding_id, "asset_id": row.asset_id, "pass_type": row.pass_type, "status": row.status, "snapshot_path": row.snapshot_path} for row in findings],
             "proposals": [{"proposal_id": row.proposal_id, "finding_id": row.finding_id, "status": row.status, "snapshot_path": row.snapshot_path} for row in proposals],
+            "continuity": {"runs": continuity_runs, "warnings": continuity_warnings,
+                           "findings_from_invalid_analysis": [row.finding_id for row in findings if row.asset_id in invalid_continuity_asset_ids and row.pass_type == "continuity"],
+                           "proposals_from_invalid_analysis": [row.proposal_id for row in proposals if row.finding_id and any(f.finding_id == row.finding_id and f.asset_id in invalid_continuity_asset_ids for f in findings)]},
             "audit": [{"event_id": row.event_id, "action": row.action, "entity_type": row.entity_type, "entity_id": row.entity_id, "result": row.result, "timestamp": row.timestamp_utc.isoformat()} for row in audit],
             "inconsistencies": inconsistencies,
         }

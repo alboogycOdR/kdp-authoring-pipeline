@@ -6,8 +6,14 @@ import argparse
 import asyncio
 import json
 import shutil
+import sys
 import tempfile
 from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+SOURCE_ROOT = REPO_ROOT / "src"
+if str(SOURCE_ROOT) not in sys.path:
+    sys.path.insert(0, str(SOURCE_ROOT))
 
 from kdp_pipeline.chapter import ChapterService, accept_chapter
 from kdp_pipeline.continuity import ContinuityService
@@ -21,7 +27,7 @@ from kdp_pipeline.storage.service import advance_to_drafting, advance_to_planned
 
 
 def run(root: Path) -> dict:
-    repo_root = Path(__file__).resolve().parents[1]
+    repo_root = REPO_ROOT
     if not (root / "prompts").is_dir():
         shutil.copytree(repo_root / "prompts", root / "prompts")
     project = create_project(root, "Pilot Dry Run")
@@ -69,4 +75,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

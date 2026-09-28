@@ -19,7 +19,7 @@ from kdp_pipeline.release import (create_release_candidate, export_release_packe
 from kdp_pipeline.storage.db import ApprovalRow
 from kdp_pipeline.storage.service import (advance_to_drafting, advance_to_planned,
     advance_to_validated, create_project, create_title, session_scope)
-from kdp_pipeline.verification import scan_scripture_placeholders
+from kdp_pipeline.verification import add_verification_flag, record_rights, scan_scripture_placeholders
 
 
 class ReleaseFixtureProvider(FakeProvider):
@@ -132,3 +132,40 @@ def test_unresolved_scripture_and_changed_verification_state_block_release_appro
     assert "verification_state_changed" in types
     with session_scope(tmp_path) as session:
         assert session.query(ApprovalRow).filter_by(scope="release_candidate", decision="accepted").count() == 0
+
+
+def test_release_candidate_and_packet_do_not_duplicate_existing_verification_or_rights_blockers(tmp_path):
+    title, accepted_chapters = _setup_book(tmp_path, include_placeholder=True)
+    scripture = scan_scripture_placeholders(tmp_path, title.title_id)["created"]
+    claim = add_verification_flag(tmp_path, title_id=title.title_id, kind="source_claim",
+        locator="chapter-001:paragraph-1", exact_text="Claim requiring human review.",
+        reviewer="editor", asset_id=accepted_chapters[0].asset_id)
+    rights = record_rights(tmp_path, title_id=title.title_id, material_type="manuscript_text",
+        description="Authorship and rights basis require human review.", reviewer="editor",
+        asset_id=accepted_chapters[0].asset_id)
+    build = build_manuscript(tmp_path, title_id=title.title_id, builder="builder")
+    candidate = create_release_candidate(tmp_path, title_id=title.title_id,
+        build_id=build.build.build_id, creator="release-manager")
+
+    stored_blockers = json.loads(candidate.initial_blockers_json)
+    for verification_id in [*scripture, claim.verification_id]:
+        assert sum(blocker.get("verification_id") == verification_id
+                   for blocker in stored_blockers) == 1
+    assert sum(blocker.get("rights_record_id") == rights.rights_record_id
+               for blocker in stored_blockers) == 1
+
+    report = inspect_title(tmp_path, title.title_id)
+    inspected = report["release"]["candidates"][0]
+    for verification_id in [*scripture, claim.verification_id]:
+        assert sum(blocker.get("verification_id") == verification_id
+                   for blocker in inspected["current_blockers"]) == 1
+    assert sum(blocker.get("rights_record_id") == rights.rights_record_id
+               for blocker in inspected["current_blockers"]) == 1
+
+    _packet_row, packet_asset = export_release_packet(tmp_path, candidate.candidate_id, creator="operator")
+    packet = json.loads(Path(packet_asset.path).read_text(encoding="utf-8"))
+    for verification_id in [*scripture, claim.verification_id]:
+        assert sum(blocker.get("verification_id") == verification_id
+                   for blocker in packet["unresolved_blockers"]) == 1
+    assert sum(blocker.get("rights_record_id") == rights.rights_record_id
+               for blocker in packet["unresolved_blockers"]) == 1

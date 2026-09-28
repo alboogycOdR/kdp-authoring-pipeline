@@ -4,6 +4,10 @@
 
 **Branch:** `feat/v0.3-production-readiness`
 
+The checkout was on `feat/v0.2-production-rehearsal-hardening`; local `main` did not contain
+the approved v0.2 commits. This branch continues from v0.2 so its hardening remains present.
+No merge to `main` was performed.
+
 **Pilot:** `PRJ-20260927-4201C302` / `BK-20260927-5D879BDB` — *A Practical Devotional for Young Christian Entrepreneurs*
 
 ## 1. Milestone summary

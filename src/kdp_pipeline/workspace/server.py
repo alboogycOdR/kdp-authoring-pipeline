@@ -9,8 +9,11 @@ import re
 import secrets
 
 from kdp_pipeline.workspace.actions import ACTION_LABELS, run_action, run_release_check, run_review_decision
+from kdp_pipeline.workspace.authoring import (AUTHORING_ACTIONS, create_book,
+    create_manual_revision, read_edit_source, run_authoring_action, run_project_action)
 from kdp_pipeline.workspace.inspection import inspect_workspace
-from kdp_pipeline.workspace.render import render_not_found, render_review, render_title, render_workspace
+from kdp_pipeline.workspace.render import (render_chapter_edit, render_not_found,
+    render_help, render_review, render_title, render_workspace)
 from kdp_pipeline.workspace.review import inspect_review
 
 
@@ -29,6 +32,18 @@ def create_workspace_server(root: Path, *, port: int = 8765) -> ThreadingHTTPSer
     csrf_token = secrets.token_urlsafe(32)
     flash: dict[str, str] = {}
     flash_lock = Lock()
+
+    def save_notice(message: str) -> str:
+        flash_id = secrets.token_urlsafe(16)
+        with flash_lock:
+            if len(flash) >= 100:
+                flash.pop(next(iter(flash)))
+            flash[flash_id] = message
+        return flash_id
+
+    def take_notice(flash_id: str) -> str:
+        with flash_lock:
+            return flash.pop(flash_id, "")
 
     class WorkspaceHandler(BaseHTTPRequestHandler):
         server_version = "KDPWorkspace"
@@ -85,13 +100,33 @@ def create_workspace_server(root: Path, *, port: int = 8765) -> ThreadingHTTPSer
             if parts.path == "/healthz":
                 self._respond("ok", "text/plain; charset=utf-8")
                 return
+            if parts.path == "/help":
+                self._respond(render_help(), "text/html; charset=utf-8")
+                return
             try:
                 query = parse_qs(parts.query, keep_blank_values=False, max_num_fields=8).get("q", [""])[0][:100]
             except ValueError:
                 self._respond(render_not_found("Search query is too complex."), "text/html; charset=utf-8", 400)
                 return
             if parts.path == "/":
-                self._respond(render_workspace(self._snapshot(), query=query), "text/html; charset=utf-8")
+                notice = take_notice(parse_qs(parts.query).get("result", [""])[0])
+                self._respond(render_workspace(self._snapshot(), query=query,
+                                               csrf_token=csrf_token, notice=notice), "text/html; charset=utf-8")
+                return
+            edit_match = re.fullmatch(r"/titles/([^/]+)/edit/([^/]+)", parts.path)
+            if edit_match:
+                title_id, asset_id = map(unquote, edit_match.groups())
+                if not _ROUTE_ID.fullmatch(title_id) or not _ROUTE_ID.fullmatch(asset_id):
+                    self._respond(render_not_found("Invalid chapter identifier."), "text/html; charset=utf-8", 400)
+                    return
+                try:
+                    content, source_hash, _ = read_edit_source(root, title_id, asset_id)
+                except (OSError, ValueError):
+                    self._respond(render_not_found("Editable chapter not found or source integrity failed."),
+                                  "text/html; charset=utf-8", 404)
+                    return
+                self._respond(render_chapter_edit(title_id, asset_id, content, source_hash, csrf_token),
+                              "text/html; charset=utf-8")
                 return
             review_match = re.fullmatch(r"/reviews/(asset|canon|release|verification|rights)/([^/]+)", parts.path)
             if review_match:
@@ -108,8 +143,7 @@ def create_workspace_server(root: Path, *, port: int = 8765) -> ThreadingHTTPSer
                     self._respond(render_not_found("Review item was not found."), "text/html; charset=utf-8", 404)
                     return
                 flash_id = parse_qs(parts.query).get("result", [""])[0]
-                with flash_lock:
-                    notice = flash.pop(flash_id, "")
+                notice = take_notice(flash_id)
                 self._respond(render_review(dossier, csrf_token, notice=notice), "text/html; charset=utf-8")
                 return
             match = re.fullmatch(r"/(projects|titles)/([^/]+)", parts.path)
@@ -121,8 +155,8 @@ def create_workspace_server(root: Path, *, port: int = 8765) -> ThreadingHTTPSer
                     return
                 snapshot = self._snapshot()
                 if kind == "titles" and snapshot is not None:
-                    notice = parse_qs(parts.query).get("done", [""])[0]
-                    message = ACTION_LABELS.get(notice, "")
+                    notice = parse_qs(parts.query).get("result", [""])[0]
+                    message = take_notice(notice) or ACTION_LABELS.get(parse_qs(parts.query).get("done", [""])[0], "")
                     self._respond(render_title(snapshot, identifier, csrf_token=csrf_token, notice=message), "text/html; charset=utf-8",
                                   200 if identifier in snapshot["titles"] else 404)
                     return
@@ -130,7 +164,9 @@ def create_workspace_server(root: Path, *, port: int = 8765) -> ThreadingHTTPSer
                     if snapshot is None or not any(item["project_id"] == identifier for item in snapshot["projects"]):
                         self._respond(render_not_found(f"Project {identifier} was not found."), "text/html; charset=utf-8", 404)
                         return
-                    self._respond(render_workspace(snapshot, project_id=identifier), "text/html; charset=utf-8")
+                    notice = take_notice(parse_qs(parts.query).get("result", [""])[0])
+                    self._respond(render_workspace(snapshot, project_id=identifier,
+                        csrf_token=csrf_token, notice=notice), "text/html; charset=utf-8")
                     return
             self._respond(render_not_found(), "text/html; charset=utf-8", 404)
 
@@ -142,6 +178,8 @@ def create_workspace_server(root: Path, *, port: int = 8765) -> ThreadingHTTPSer
             parts = urlsplit(self.path)
             if parts.path == "/healthz":
                 self._respond("ok", "text/plain; charset=utf-8", head=True)
+            elif parts.path == "/help":
+                self._respond(render_help(), "text/html; charset=utf-8", head=True)
             elif parts.path in {"/", "/projects", "/titles"}:
                 self._respond(render_workspace(self._snapshot()), "text/html; charset=utf-8", head=True)
             else:
@@ -159,13 +197,24 @@ def create_workspace_server(root: Path, *, port: int = 8765) -> ThreadingHTTPSer
                 return
             path = urlsplit(self.path).path
             match = re.fullmatch(r"/titles/([^/]+)/actions/([a-z-]+)", path)
+            project_match = re.fullmatch(r"/projects/([^/]+)/actions/(controls|new-title)", path)
+            edit_match = re.fullmatch(r"/titles/([^/]+)/edit/([^/]+)", path)
+            book_match = path == "/books"
             review_match = re.fullmatch(r"/reviews/(asset|canon|release|verification|rights)/([^/]+)/(decide|check)", path)
-            if match is None and review_match is None:
+            if match is None and edit_match is None and review_match is None and project_match is None and not book_match:
                 self._method_not_allowed()
                 return
             if match:
                 title_id, action = map(unquote, match.groups())
-                valid_route = _ROUTE_ID.fullmatch(title_id) and action in ACTION_LABELS
+                valid_route = _ROUTE_ID.fullmatch(title_id) and action in (ACTION_LABELS.keys() | AUTHORING_ACTIONS)
+            elif edit_match:
+                title_id, asset_id = map(unquote, edit_match.groups())
+                valid_route = _ROUTE_ID.fullmatch(title_id) and _ROUTE_ID.fullmatch(asset_id)
+            elif project_match:
+                project_id, project_action = map(unquote, project_match.groups())
+                valid_route = _ROUTE_ID.fullmatch(project_id)
+            elif book_match:
+                valid_route = True
             else:
                 kind, identifier, review_action = review_match.groups()
                 identifier = unquote(identifier)
@@ -181,7 +230,7 @@ def create_workspace_server(root: Path, *, port: int = 8765) -> ThreadingHTTPSer
                 size = int(self.headers.get("Content-Length", ""))
             except ValueError:
                 size = -1
-            if size < 0 or size > 16384:
+            if size < 0 or size > (200000 if edit_match else 16384):
                 self._respond(render_not_found("Form size is invalid."), "text/html; charset=utf-8", 413)
                 return
             try:
@@ -197,6 +246,48 @@ def create_workspace_server(root: Path, *, port: int = 8765) -> ThreadingHTTPSer
                 self._respond(render_not_found("Reload the Workspace and submit the form again."),
                               "text/html; charset=utf-8", 403)
                 return
+            if edit_match:
+                try:
+                    result = create_manual_revision(root, title_id, asset_id, form)
+                except (OSError, ValueError) as exc:
+                    try:
+                        content, source_hash, _ = read_edit_source(root, title_id, asset_id)
+                    except (OSError, ValueError):
+                        self._respond(render_not_found("Chapter source changed or is unavailable."),
+                                      "text/html; charset=utf-8", 409)
+                        return
+                    self._respond(render_chapter_edit(title_id, asset_id, content, source_hash,
+                        csrf_token, notice=str(exc) if isinstance(exc, ValueError) else "Revision could not be saved."),
+                        "text/html; charset=utf-8", 422)
+                    return
+                flash_id = save_notice(result)
+                self.send_response(303)
+                self.send_header("Location", f"/titles/{title_id}?result={flash_id}#pending")
+                self.send_header("Content-Length", "0")
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                return
+            if book_match or project_match:
+                try:
+                    if book_match:
+                        destination_id, message = create_book(root, form)
+                        location = f"/titles/{destination_id}"
+                    else:
+                        destination_id, message = run_project_action(root, project_id, project_action, form)
+                        location = f"/titles/{destination_id}" if destination_id else f"/projects/{project_id}"
+                except (OSError, ValueError, RuntimeError) as exc:
+                    snapshot = self._snapshot()
+                    message = str(exc) if isinstance(exc, ValueError) else "Action failed; inspect the current records."
+                    self._respond(render_workspace(snapshot, project_id=project_id if project_match else None,
+                        csrf_token=csrf_token, notice=message, error=True), "text/html; charset=utf-8", 422)
+                    return
+                flash_id = save_notice(message)
+                self.send_response(303)
+                self.send_header("Location", f"{location}?result={flash_id}")
+                self.send_header("Content-Length", "0")
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                return
             if review_match:
                 try:
                     title_id, result = (run_release_check(root, identifier, form) if review_action == "check"
@@ -211,11 +302,7 @@ def create_workspace_server(root: Path, *, port: int = 8765) -> ThreadingHTTPSer
                     self._respond(render_review(dossier, csrf_token, notice=message, error=True),
                                   "text/html; charset=utf-8", 422)
                     return
-                flash_id = secrets.token_urlsafe(16)
-                with flash_lock:
-                    if len(flash) >= 100:
-                        flash.pop(next(iter(flash)))
-                    flash[flash_id] = result
+                flash_id = save_notice(result)
                 self.send_response(303)
                 self.send_header("Location", f"/reviews/{kind}/{identifier}?result={flash_id}")
                 self.send_header("Content-Length", "0")
@@ -223,8 +310,9 @@ def create_workspace_server(root: Path, *, port: int = 8765) -> ThreadingHTTPSer
                 self.end_headers()
                 return
             try:
-                run_action(root, title_id, action, form)
-            except (OSError, ValueError) as exc:
+                result = (run_authoring_action(root, title_id, action, form)
+                          if action in AUTHORING_ACTIONS else run_action(root, title_id, action, form))
+            except (OSError, ValueError, RuntimeError) as exc:
                 snapshot = self._snapshot()
                 if snapshot is None:
                     self._respond(render_not_found("Workspace database is unavailable."),
@@ -235,7 +323,11 @@ def create_workspace_server(root: Path, *, port: int = 8765) -> ThreadingHTTPSer
                                            notice=message, error=True), "text/html; charset=utf-8", 422)
                 return
             self.send_response(303)
-            self.send_header("Location", f"/titles/{title_id}?done={action}#actions")
+            if action in AUTHORING_ACTIONS:
+                flash_id = save_notice(result)
+                self.send_header("Location", f"/titles/{title_id}?result={flash_id}#authoring")
+            else:
+                self.send_header("Location", f"/titles/{title_id}?done={action}#actions")
             self.send_header("Content-Length", "0")
             self.send_header("Cache-Control", "no-store")
             self.end_headers()

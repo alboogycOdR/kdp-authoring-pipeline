@@ -14,6 +14,7 @@ This guide complements [AGENTS.md](../AGENTS.md), which governs repository instr
 - **Branch strategy:** Keep work on the requested branch or create a task-scoped branch from the requested base. Do not switch, merge, rebase, or delete branches without explicit authorization. Preserve existing user work.
 - **Commit strategy:** Keep changes reviewable and scoped. Do not commit, push, merge, rebase, or delete branches unless explicitly instructed. When authorized, stage only intended files and report the resulting commit.
 - **Documentation updates:** Update the architecture index and affected operator/developer docs when behavior or workflow changes. Prefer links to canonical content over copied explanations. Keep roadmap, report, and implementation status accurate.
+- **Environment boundaries:** Read the [environment runbook](operations/ENVIRONMENTS.md) before VPS work. Development and staging have separate databases and artefacts; do not silently copy state, run provider calls, or treat a local decision as a staging approval.
 
 ## Before finishing
 

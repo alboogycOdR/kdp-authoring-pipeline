@@ -51,6 +51,18 @@ class ConceptService:
             raise ValueError("Concept validation uses deterministic checks; use validate_concept_asset")
         context: dict[str, Any] = {"title_id": title_id, "audience": audience, "source_concept": "No source concept supplied."}
         refs: list[dict[str, str]] = []
+        if artifact == "audience-brief":
+            with session_scope(root) as session:
+                note = session.scalar(select(AssetRow).where(
+                    AssetRow.title_id == title_id, AssetRow.asset_type == "concept.idea-note"
+                ).order_by(AssetRow.created_at.desc()))
+                if note is not None:
+                    path = Path(note.path)
+                    if not path.is_file() or sha256_file(path) != note.sha256:
+                        raise ValueError("Operator idea note file/hash integrity check failed")
+                    context["audience"] = audience + "\n\nOperator's starting book idea and reader notes:\n" + path.read_text(encoding="utf-8")
+                    refs.append({"input_ref": note.asset_id, "sha256": note.sha256,
+                                 "context_tier": "A", "role": "operator_idea"})
         if concept_asset_id:
             with session_scope(root) as session:
                 source = session.get(AssetRow, concept_asset_id)

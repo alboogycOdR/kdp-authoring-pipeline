@@ -21,4 +21,17 @@
       // Keep the selection active for the current page without persistence.
     }
   });
+  for (const form of document.querySelectorAll('form[data-provider-call="true"]')) {
+    form.addEventListener("submit", () => {
+      const button = form.querySelector('button[type="submit"]');
+      if (button) {
+        button.disabled = true;
+        button.textContent = "Request running…";
+      }
+      const status = document.createElement("p");
+      status.setAttribute("role", "status");
+      status.textContent = "Keep this page open. If the connection fails, inspect Recent jobs before trying again.";
+      form.append(status);
+    });
+  }
 })();

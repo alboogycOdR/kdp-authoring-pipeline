@@ -209,7 +209,68 @@ def _title_link(title_id: str, report: dict) -> str:
     )
 
 
-def _workspace_content(snapshot: dict, project_id: str | None = None, query: str = "") -> str:
+def _provider_options(snapshot: dict) -> str:
+    return ''.join(
+        f'<option value="{_e(p["provider_id"])}">{_e(p["display_name"])} · {_e(p["model"])}</option>'
+        for p in snapshot.get("available_providers", []) if p["ready"] and p["priced"]
+    )
+
+
+def _start_form(snapshot: dict, token: str) -> str:
+    if not token:
+        return ""
+    options = _provider_options(snapshot)
+    if not options:
+        return ('<section class="start-book" id="start"><h2>Start a new book</h2>'
+                '<p>No enabled provider has both a configured credential and model pricing. '
+                'Ask the system operator to configure one before creating a book.</p></section>')
+    return (
+        '<section class="start-book" id="start"><h2>Start a new book</h2>'
+        '<p>Save your idea, create a project and title, and set a hard spending limit. '
+        'Creating the book makes no AI request; generation is a separate, confirmed step.</p>'
+        '<form method="post" action="/books">'
+        f'<input type="hidden" name="csrf_token" value="{_e(token)}">'
+        '<label>Your name<input name="operator" required maxlength="100"></label>'
+        '<label>Project name<input name="project_name" required maxlength="200" placeholder="A book or series workspace"></label>'
+        '<label>Working book title<input name="title_name" required maxlength="200"></label>'
+        '<label>Who is the book for?<textarea name="audience" required maxlength="1000" rows="2" placeholder="Reader age or stage, interests, and need"></textarea></label>'
+        '<label>Your book idea<textarea name="idea" required maxlength="4000" rows="4" placeholder="What is the book about? What will the reader experience or gain?"></textarea></label>'
+        f'<label>AI provider<select name="provider_id" required>{options}</select></label>'
+        '<label>Monthly AI spending limit (USD)<input name="monthly_usd" type="number" min="0.01" max="10000" step="0.01" required></label>'
+        '<label>Maximum estimated cost per AI request (USD)<input name="max_run_usd" type="number" min="0.01" max="10000" step="0.01" required></label>'
+        '<p class="muted">The limits are hard stops for future requests. Provider billing may differ from local estimates.</p>'
+        '<button type="submit">Create book and save idea</button></form></section>'
+    )
+
+
+def _project_forms(snapshot: dict, project_id: str, token: str) -> str:
+    if not token:
+        return ""
+    options = _provider_options(snapshot)
+    add_title = (
+        f'<form method="post" action="/projects/{_e(quote(project_id, safe=""))}/actions/new-title">'
+        f'<input type="hidden" name="csrf_token" value="{_e(token)}">'
+        '<label>Your name<input name="operator" required maxlength="100"></label>'
+        '<label>Working title<input name="title_name" required maxlength="200"></label>'
+        '<button type="submit">Add title to this project</button></form>'
+    )
+    controls = (
+        f'<form method="post" action="/projects/{_e(quote(project_id, safe=""))}/actions/controls">'
+        f'<input type="hidden" name="csrf_token" value="{_e(token)}">'
+        '<label>Your name<input name="operator" required maxlength="100"></label>'
+        f'<label>Priced provider<select name="provider_id" required>{options}</select></label>'
+        '<label>Monthly limit (USD)<input name="monthly_usd" type="number" min="0.01" step="0.01" required></label>'
+        '<label>Per-request limit (USD)<input name="max_run_usd" type="number" min="0.01" step="0.01" required></label>'
+        '<button type="submit">Save provider and hard budget</button></form>' if options else
+        '<p class="empty-note">No ready, priced provider is available for browser generation.</p>'
+    )
+    return ('<section class="start-book"><h2>Manage this project</h2><details><summary>Add a book title</summary>'
+            + add_title + '</details><details><summary>Provider and spending limits</summary>'
+            + controls + '</details></section>')
+
+
+def _workspace_content(snapshot: dict, project_id: str | None = None, query: str = "",
+                       token: str = "") -> str:
     selected_project = next((p for p in snapshot["projects"] if p["project_id"] == project_id), None)
     if project_id and selected_project is None:
         return _empty_workspace(f"Project {project_id} was not found.")
@@ -257,7 +318,8 @@ def _workspace_content(snapshot: dict, project_id: str | None = None, query: str
         titles_html = '<section class="directory"><h2>Titles</h2>' + (
             f'<ul class="title-list">{title_rows}</ul>' if title_rows else '<p class="empty-note">No matching titles.</p>') + '</section>'
     activity_html = '<section class="recent-activity"><h2>Recent Activity</h2>' + _activity(events) + '</section>'
-    return project_header + '<section class="attention"><h2 class="section-title">Attention</h2>' + attention + '</section>' + activity_html + projects_html + titles_html
+    entry = _project_forms(snapshot, project_id, token) if project_id else _start_form(snapshot, token)
+    return project_header + entry + '<section class="attention"><h2 class="section-title">Attention</h2>' + attention + '</section>' + activity_html + projects_html + titles_html
 
 
 def _empty_workspace(message: str) -> str:
@@ -265,11 +327,14 @@ def _empty_workspace(message: str) -> str:
             '<p>Initialize the local workspace from the CLI with <code>kdp init-db</code>, then reload this page.</p></section>')
 
 
-def render_workspace(snapshot: dict | None, *, project_id: str | None = None, query: str = "") -> str:
+def render_workspace(snapshot: dict | None, *, project_id: str | None = None, query: str = "",
+                     csrf_token: str = "", notice: str = "", error: bool = False) -> str:
     if snapshot is None:
         body = _empty_workspace("The local workspace database is not available yet.")
     else:
-        body = _workspace_content(snapshot, project_id, query[:100])
+        body = _workspace_content(snapshot, project_id, query[:100], csrf_token)
+    if notice:
+        body = f'<div class="action-notice {"action-error" if error else "action-success"}" role="status">{_e(notice)}</div>' + body
     return _page("Workspace", body, query=query)
 
 
@@ -314,7 +379,11 @@ def _section_cards(report: dict, title_id: str) -> dict[str, str]:
     condition_items = [f'<li><strong>{_e(item.get("approval_id"))}</strong><span>{_e(" ".join(item.get("conditions", [])))}</span></li>' for item in conditions]
     pending_assets = _assets_needing_approval(report)
     pending_items = [f'<li><strong>{_review_link("asset", item["asset_id"])}</strong>'
-                     f'<span>{_e(item["asset_type"])} · experimental</span>{_status("Needs human review", "approval")}</li>'
+                     f'<span>{_e(item["asset_type"])} · experimental'
+                     + (f' · <a href="/titles/{_e(quote(title_id, safe=""))}/edit/{_e(quote(item["asset_id"], safe=""))}">Edit in browser</a>'
+                        if item["asset_type"] in {"concept.brief", "planning.positioning", "planning.book-brief",
+                                                    "planning.outline", "planning.chapter-card", "chapter.draft", "chapter.revision"} else '')
+                     + f'</span>{_status("Needs human review", "approval")}</li>'
                      for item in pending_assets]
     return {
         "pending": _records(pending_items, "No experimental content artefacts await acceptance."),
@@ -334,13 +403,99 @@ def _records(items: list[str], empty: str) -> str:
 
 
 def _action_form(title_id: str, action: str, token: str, label: str, fields: str = "") -> str:
-    return (f'<form method="post" action="/titles/{_e(quote(title_id, safe=""))}/actions/{_e(action)}">'
+    is_generation = action in {"audience-brief", "concept-seeds", "concept-enrich", "concept-score",
+                  "concept-drafting-brief", "positioning", "book-brief", "outline",
+                  "chapter-card", "draft-chapter", "continuity", "developmental",
+                  "editorial-pass", "revise-chapter"}
+    if is_generation:
+        fields = _operator() + fields
+    return (f'<form method="post" action="/titles/{_e(quote(title_id, safe=""))}/actions/{_e(action)}"'
+            + (' data-provider-call="true"' if is_generation else '') + '>'
             f'<input type="hidden" name="csrf_token" value="{_e(token)}">'
             f'{fields}<button type="submit">{_e(label)}</button></form>')
 
 
 def _operator() -> str:
     return '<label>Operator name<input name="operator" required maxlength="100" autocomplete="name"></label>'
+
+
+def _authoring_actions(report: dict, title_id: str, token: str) -> str:
+    if not token:
+        return ""
+    assets = report.get("assets", [])
+    def options(*types: str, accepted: bool | None = None) -> str:
+        return ''.join(
+            f'<option value="{_e(item["asset_id"])}">{_e(item["asset_type"])} · {_e(item["asset_id"])} · {_e(item.get("approval_status"))}</option>'
+            for item in assets if item.get("asset_type") in types
+            and (accepted is None or (item.get("approval_status") == "accepted") == accepted)
+        )
+    def select(*types: str, accepted: bool | None = None) -> str:
+        choices = options(*types, accepted=accepted)
+        return f'<label>Source artefact<select name="asset_id" required>{choices}</select></label>' if choices else '<p class="empty-note">Required source artefact is not available yet.</p>'
+    cost = ('<label class="review-confirm"><input type="checkbox" name="confirm_cost" value="yes" required>'
+            ' I understand this sends context to the selected AI provider and incurs usage cost.</label>')
+    chapter = '<label>Chapter number<input name="chapter_number" type="number" min="1" max="999" value="1" required></label>'
+    budget = report.get("budget", {})
+    provider = report.get("provider") or {}
+    cost_note = (f'<p class="muted">Provider: {_e(provider.get("display_name", "none selected"))} · '
+                 f'hard budget: {_e(budget.get("hard_stop", False))} · '
+                 f'monthly ${_e(budget.get("monthly_limit_usd"))} · '
+                 f'per request ${_e(budget.get("max_run_estimated_cost_usd"))}. '
+                 'Each generation action is one request; review its result before another.</p>')
+    concept = (
+        '<div class="action-group"><h3>1. Develop your idea</h3><p>Your saved idea informs the audience brief. Review each experimental result before continuing.</p>'
+        + (_action_form(title_id, "save-idea", token, "Save starting idea",
+            _operator() + '<label>Intended reader<textarea name="audience" required maxlength="1000" rows="2"></textarea></label>'
+            + '<label>Book idea<textarea name="idea" required maxlength="4000" rows="4"></textarea></label>')
+           if not options("concept.idea-note") else '<p>Your starting idea is saved.</p>')
+        + _action_form(title_id, "concept-enable", token, "Enable concept review", _operator())
+        + '<details><summary>Generate audience brief</summary>'
+        + _action_form(title_id, "audience-brief", token, "Generate audience brief",
+            '<label>Reader definition<textarea name="audience" required maxlength="1000" rows="2"></textarea></label>' + cost) + '</details>'
+        + '<details><summary>Generate concept options</summary>'
+        + _action_form(title_id, "concept-seeds", token, "Generate concept options",
+            select("concept.audience-brief") + cost) + '</details>'
+        + '<details><summary>Develop your chosen idea</summary>'
+        + _action_form(title_id, "concept-enrich", token, "Develop concept brief",
+            select("concept.seed-set") + '<label>Chosen idea or option<textarea name="selection" required maxlength="2000" rows="3"></textarea></label>' + cost) + '</details>'
+        + '<details><summary>Validate and assess concept</summary>'
+        + _action_form(title_id, "concept-validate", token, "Check concept completeness", select("concept.brief", accepted=False))
+        + _action_form(title_id, "concept-score", token, "Generate advisory scorecard", select("concept.brief", accepted=False) + cost)
+        + '<p>Open the concept brief under Awaiting acceptance to review and approve it yourself.</p></details>'
+        + '<details><summary>Create drafting brief after concept approval</summary>'
+        + _action_form(title_id, "concept-drafting-brief", token, "Generate drafting brief", select("concept.brief", accepted=True) + cost)
+        + '</details></div>'
+    )
+    planning = (
+        '<div class="action-group"><h3>2. Plan the book</h3><p>Accept each planning artefact from its review page before advancing.</p>'
+        + _action_form(title_id, "positioning", token, "Generate positioning", cost)
+        + _action_form(title_id, "advance-validated", token, "Advance to validated", _operator())
+        + _action_form(title_id, "book-brief", token, "Generate book brief", cost)
+        + _action_form(title_id, "outline", token, "Generate outline", cost)
+        + _action_form(title_id, "chapter-card", token, "Generate chapter card", chapter + cost)
+        + _action_form(title_id, "advance-planned", token, "Advance to planned", _operator())
+        + '</div>'
+    )
+    chapter_source = select("chapter.draft", "chapter.revision", accepted=False)
+    editorial_passes = ''.join(f'<option value="{_e(p)}">{_e(p.replace("-", " ").title())}</option>'
+                               for p in ("voice", "line", "copy", "reader-experience", "consistency"))
+    drafting = (
+        '<div class="action-group"><h3>3. Draft and review chapters</h3><p>Work on one chapter at a time. Generated chapters remain experimental until you accept them.</p>'
+        + _action_form(title_id, "advance-drafting", token, "Start drafting stage", _operator())
+        + _action_form(title_id, "draft-chapter", token, "Draft one chapter", chapter + cost)
+        + '<details><summary>Analyze a draft</summary>'
+        + _action_form(title_id, "continuity", token, "Run continuity analysis", chapter + chapter_source + cost)
+        + _action_form(title_id, "developmental", token, "Run developmental analysis", chapter + chapter_source + cost)
+        + _action_form(title_id, "editorial-pass", token, "Run selected editorial pass",
+            chapter + chapter_source + f'<label>Pass<select name="pass_type">{editorial_passes}</select></label>' + cost)
+        + '</details><details><summary>Revise and carry context forward</summary>'
+        + _action_form(title_id, "revise-chapter", token, "Generate a revision", chapter + chapter_source + cost)
+        + _action_form(title_id, "chapter-summary", token, "Save accepted chapter summary", chapter +
+            select("chapter.accepted", accepted=True) + '<label>Continuity summary<textarea name="summary" required maxlength="3000" rows="3"></textarea></label>' + _operator())
+        + '</details><p>Accept the chosen chapter draft or revision from Awaiting acceptance.</p></div>'
+    )
+    return ('<section class="title-section workflow-actions" id="authoring"><h2>Book authoring</h2>'
+            + cost_note + '<div class="action-grid">' + concept + planning + drafting + '</div></section>')
 
 
 def _workflow_actions(report: dict, title_id: str, token: str) -> str:
@@ -410,7 +565,8 @@ def render_title(snapshot: dict, title_id: str, *, csrf_token: str = "", notice:
         f'<p>{_e(title_id)} · {_e(title.get("status"))}</p></div>{_status(attention_label, "blocked" if "items need" in attention_label else "ready")}</header>'
         '<nav class="section-nav" aria-label="Title sections">'
         + ''.join(f'<a href="#{name}">{label}</a>' for name, label in (
-            ("overview", "Overview"), ("pending", "Awaiting acceptance"), ("actions", "Actions"),
+            ("overview", "Overview"), ("authoring", "Book authoring"), ("jobs", "Recent jobs"),
+            ("pending", "Awaiting acceptance"), ("actions", "Actions"),
             ("planning", "Planning"), ("chapters", "Chapters"),
             ("editorial", "Editorial and canon"), ("verification", "Verification and rights"),
             ("builds", "Builds"), ("release", "Release"), ("provider", "Provider and budget"),
@@ -419,6 +575,14 @@ def render_title(snapshot: dict, title_id: str, *, csrf_token: str = "", notice:
         f'<p>{_e(report.get("chapter_lifecycle", {}).get("accepted_chapter_count", 0))} accepted chapters · '
         f'{len(blockers)} verification blockers</p></section>'
         + (f'<div class="action-notice {"action-error" if error else "action-success"}" role="status">{_e(notice)}</div>' if notice else '')
+        + _authoring_actions(report, title_id, csrf_token)
+        + '<section class="title-section" id="jobs"><h2>Recent jobs</h2><p>Check the result and usage before starting another paid request. If a connection fails, inspect the job before retrying.</p>'
+        + _records([
+            f'<li><strong>{_e(job.get("job_id"))}</strong><span>{_e(job.get("job_type"))} · '
+            f'{_e(job.get("error") or job.get("provider_billing_warning") or job.get("usage_event_id") or "No usage event")}</span>'
+            f'{_status(job.get("status"), "ready" if job.get("status") == "success" else "blocked")}</li>'
+            for job in reversed(report.get("jobs", [])[-8:])], "No jobs recorded yet.")
+        + '</section>'
         + f'<section class="title-section" id="pending"><h2>Awaiting acceptance</h2>{sections["pending"]}</section>'
         + _workflow_actions(report, title_id, csrf_token)
         + ''.join(f'<section class="title-section" id="{name}"><h2>{label}</h2>{sections[key]}</section>' for name, label, key in (
@@ -434,8 +598,125 @@ def render_title(snapshot: dict, title_id: str, *, csrf_token: str = "", notice:
     return _page(title.get("working_title", "Title"), body)
 
 
+def render_help() -> str:
+    """Explain the browser authoring journey without exposing operator CLI steps."""
+    body = (
+        '<div class="help-page">'
+        '<section class="help-hero" aria-labelledby="help-title">'
+        '<div class="help-hero-copy"><p class="help-kicker">Your guide to the Workspace</p>'
+        '<h1 id="help-title">From your first idea to a book ready for review</h1>'
+        '<p>You can create and manage your book here in the browser. Work through the stages below, '
+        'review what the system creates, and make each important decision yourself.</p>'
+        '<a class="help-primary" href="/#start">Start a new book</a>'
+        '<a class="help-secondary" href="#journey">See the steps</a></div>'
+        '<div class="help-book-art" aria-hidden="true"><div class="help-book-cover">'
+        '<span class="help-book-line"></span><span class="help-book-line"></span>'
+        '<span class="help-book-title">Your next<br>book starts<br>here.</span>'
+        '<span class="help-book-rule"></span><span class="help-book-footer">IDEA → MANUSCRIPT</span>'
+        '</div><span class="help-book-shadow"></span></div></section>'
+        '<nav class="help-contents" aria-label="Help page sections">'
+        '<a href="#journey">The journey</a><a href="#costs">AI and costs</a>'
+        '<a href="#review">Review and approval</a><a href="#questions">Common questions</a></nav>'
+        '<section class="help-intro" id="journey"><div><h2>Six stages, one book</h2>'
+        '<p>Each stage leaves you with something you can inspect. You choose what to keep. '
+        'If a step is blocked, open your title page and look at <strong>Attention</strong>, '
+        '<strong>Awaiting acceptance</strong>, or <strong>Verification</strong> for the next action.</p></div>'
+        '<p class="help-intro-note">Your work is saved under a <strong>project</strong>. '
+        'Each book in that project is a <strong>title</strong>.</p></section>'
+        '<ol class="help-journey">'
+        '<li id="step-start"><div class="help-step-head"><span class="help-step-number">1</span>'
+        '<div><p class="help-step-phase">Begin</p><h3>Save your idea</h3></div></div>'
+        '<p>On the Workspace home page, choose <strong>Start a new book</strong>. Add your name, '
+        'project name, working title, intended reader, and a short description of the idea. '
+        'Select the available AI provider and set monthly and per-request spending limits.</p>'
+        '<p class="help-step-outcome">What happens: your project, title, idea, and spending controls are saved. '
+        'No AI request is made yet.</p></li>'
+        '<li id="step-concept"><div class="help-step-head"><span class="help-step-number">2</span>'
+        '<div><p class="help-step-phase">Explore</p><h3>Shape and approve the concept</h3></div></div>'
+        '<p>Open your title and find <strong>Book authoring → Develop your idea</strong>. '
+        'Create a reader brief, explore concept options, then develop the option you prefer. '
+        'Check the concept brief for completeness and read it carefully. You can edit it in the browser.</p>'
+        '<p class="help-step-outcome">Before continuing: open the concept under '
+        '<strong>Awaiting acceptance</strong> and accept it only when it reflects the book you want.</p></li>'
+        '<li id="step-plan"><div class="help-step-head"><span class="help-step-number">3</span>'
+        '<div><p class="help-step-phase">Plan</p><h3>Set the book’s direction</h3></div></div>'
+        '<p>Use <strong>Book authoring → Plan the book</strong> to create positioning, a book brief, '
+        'an outline, and a card for each chapter. Review and accept each item from its review page. '
+        'Use the stage buttons when the required work is accepted.</p>'
+        '<p class="help-step-outcome">What you get: a clear promise to the reader and a chapter-by-chapter plan '
+        'for drafting.</p></li>'
+        '<li id="step-draft"><div class="help-step-head"><span class="help-step-number">4</span>'
+        '<div><p class="help-step-phase">Write</p><h3>Draft and review one chapter at a time</h3></div></div>'
+        '<p>Start the drafting stage, then choose <strong>Draft one chapter</strong>. Read the experimental '
+        'draft. Run continuity or editorial analysis if useful, make a browser revision, and decide which '
+        'version to accept. Repeat for later chapters, using a chapter summary to carry context forward.</p>'
+        '<p class="help-step-outcome">Remember: generated text is a draft. It becomes accepted manuscript '
+        'content only after your explicit review and acceptance.</p></li>'
+        '<li id="step-verify"><div class="help-step-head"><span class="help-step-number">5</span>'
+        '<div><p class="help-step-phase">Check</p><h3>Resolve sources, claims, and rights</h3></div></div>'
+        '<p>Under <strong>Workflow actions → Verification</strong>, scan accepted chapters for Scripture '
+        'placeholders and add flags for claims or research that need checking. Record any third-party material '
+        'that needs rights review. Open each verification or rights item to record a human decision with evidence.</p>'
+        '<p class="help-step-outcome">A placeholder such as <code>[SCRIPTURE NEEDED]</code> remains a blocker '
+        'until a person supplies and verifies an appropriate reference. The system does not invent one.</p></li>'
+        '<li id="step-release"><div class="help-step-head"><span class="help-step-number">6</span>'
+        '<div><p class="help-step-phase">Prepare</p><h3>Build and review the release packet</h3></div></div>'
+        '<p>Choose <strong>Create Markdown build</strong> to assemble accepted chapters. Inspect the build and '
+        'its blockers, then create a release candidate and export its review packet. The release review page '
+        'shows the manuscript, provenance, findings, conditions, and consequences before a human decision.</p>'
+        '<p class="help-step-outcome">A blocked build or candidate is for review, not publication. '
+        'Final KDP upload and publication are separate manual actions.</p></li>'
+        '</ol>'
+        '<div class="help-two-up">'
+        '<section class="help-note" id="costs"><h2>Before you use AI</h2>'
+        '<p>Creating a book and saving an idea costs nothing in AI usage. A generation or analysis button '
+        'sends context to your selected provider and may incur a charge. The form asks you to confirm each '
+        'request. Your project spending limits are hard stops based on local estimates; the provider’s '
+        'billing report is the final record of charges.</p></section>'
+        '<section class="help-note" id="review"><h2>You stay in control</h2>'
+        '<p>AI results are experimental. Open the review page to see the content, where it came from, '
+        'findings, blockers, and conditions before accepting anything. Verification, rights, canon, and '
+        'release decisions also require a person. Nothing is automatically published to KDP.</p></section></div>'
+        '<section class="help-questions" id="questions"><h2>Common questions</h2>'
+        '<details><summary>Where do I find the book I started?</summary><p>Return to the '
+        '<a href="/">Workspace</a> home page. Open your project under <strong>Projects</strong>, '
+        'then your book under <strong>Titles</strong>.</p></details>'
+        '<details><summary>Why can’t I move to the next stage?</summary><p>Open the title page and '
+        'check what is waiting in <strong>Awaiting acceptance</strong>, <strong>Verification</strong>, '
+        'and the blocker lists. Review the required item or resolve the stated condition before trying again.</p></details>'
+        '<details><summary>Can I fix a draft myself?</summary><p>Yes. Choose <strong>Edit in browser</strong> '
+        'next to an experimental concept, plan item, or chapter. Saving creates a new version; the original '
+        'remains available. Review and accept the version you want to keep.</p></details>'
+        '<details><summary>Does a release packet publish my book?</summary><p>No. It gathers the manuscript '
+        'and review evidence for a human decision. Uploading and publishing on KDP remain manual.</p></details>'
+        '</section><div class="help-end"><p>Ready to begin?</p>'
+        '<a class="help-primary" href="/#start">Create your book</a></div></div>'
+    )
+    return _page("Help: create a book", body)
+
+
 def render_not_found(message: str = "Page not found") -> str:
     return _page("Not found", _empty_workspace(message))
+
+
+def render_chapter_edit(title_id: str, asset_id: str, content: str, source_hash: str,
+                        token: str, *, notice: str = "") -> str:
+    body = (
+        f'<p class="breadcrumb"><a href="/">Workspace</a> / <a href="{_e(_title_url(title_id))}">Title</a> / Edit chapter</p>'
+        '<section class="title-section review-section"><h1>Edit experimental artefact</h1>'
+        f'<p>Source {_e(asset_id)} · SHA-256 {_e(source_hash)}</p>'
+        '<p>This creates a new experimental manual revision. It preserves the source, requires a separate human acceptance, and makes no provider call.</p>'
+        + (f'<p class="action-notice action-error">{_e(notice)}</p>' if notice else '')
+        +
+        f'<form class="review-form" method="post" action="/titles/{_e(quote(title_id, safe=""))}/edit/{_e(quote(asset_id, safe=""))}">'
+        f'<input type="hidden" name="csrf_token" value="{_e(token)}">'
+        f'<input type="hidden" name="source_sha256" value="{_e(source_hash)}">'
+        '<label>Your name<input name="operator" required maxlength="100"></label>'
+        '<label>Reason for revision<textarea name="reason" required maxlength="2000" rows="2"></textarea></label>'
+        f'<label>Complete revised content<textarea name="content" required maxlength="100000" rows="28">{_e(content)}</textarea></label>'
+        '<button type="submit">Save experimental revision</button></form></section>'
+    )
+    return _page("Edit artefact", body)
 
 
 def _review_list(items: list[str], empty: str) -> str:
@@ -588,6 +869,8 @@ def render_review(dossier: dict, csrf_token: str, *, notice: str = "", error: bo
 
 
 def _page(title: str, body: str, query: str = "") -> str:
+    workspace_current = ' aria-current="page"' if title == "Workspace" else ""
+    help_current = ' aria-current="page"' if title.startswith("Help:") else ""
     return (
         '<!doctype html><html lang="en"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
@@ -598,7 +881,10 @@ def _page(title: str, body: str, query: str = "") -> str:
         '<a class="skip-link" href="#main">Skip to content</a>'
         '<header class="app-header"><a class="wordmark" href="/" aria-label="KDP Pipeline Workspace home">'
         '<span class="mark" aria-hidden="true"><i></i><i></i><i></i></span><span>KDP Pipeline</span></a>'
-        '<div class="header-tools"><form action="/" method="get" role="search">'
+        '<div class="header-tools"><nav class="site-nav" aria-label="Main navigation">'
+        f'<a href="/"{workspace_current}>Workspace</a>'
+        f'<a href="/help"{help_current}>Help</a>'
+        '</nav><form action="/" method="get" role="search">'
         f'<label class="visually-hidden" for="workspace-search">Search projects and titles</label><input id="workspace-search" name="q" type="search" value="{_e(query)}" placeholder="Search projects and titles">'
         '<button type="submit">Search</button></form>'
         '<label class="theme-label" for="theme-choice">Theme</label><select id="theme-choice" name="theme" aria-label="Choose workspace theme">'

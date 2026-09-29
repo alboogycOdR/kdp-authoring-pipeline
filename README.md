@@ -29,6 +29,10 @@ The platform is complete through **Sprint 16**. Its current scope includes:
 
 Current workflow scope is documented in the [Master Architecture Pack](KDP_PIPELINE_MASTER_ARCHITECTURE_PACK/README.md) and its [architecture index](docs/ARCHITECTURE_INDEX.md). See the [v1.0 platform release note](docs/operations/V1_0_PLATFORM_COMPLETE.md) and [Operator Workspace guide](docs/operations/OPERATOR_WORKSPACE.md) for the completed milestone and local workflow.
 
+## Environments
+
+This Windows checkout is **development**. The Ubuntu VPS `clawsrv` is **staging**, with a separate SQLite database and Workspace available only over Tailscale. The two existing projects, including Pilot 1B, were copied to staging through an audited path migration; changes do not synchronize automatically. Browser operators can start a book, set its provider and budget, develop and review its content, and prepare a release packet through the Workspace; KDP publication remains manual. See [Environment topology and operations](docs/operations/ENVIRONMENTS.md) for the URL, paths, provider setup, and deployment boundary.
+
 ## Architecture
 
 The repository now contains the **KDP Pipeline Master Architecture Pack**, the long-term source of truth for architecture decisions. New contributors and AI agents should read [AGENTS.md](AGENTS.md), then the [Architecture Pack README](KDP_PIPELINE_MASTER_ARCHITECTURE_PACK/README.md) and [Master Architecture Overview](KDP_PIPELINE_MASTER_ARCHITECTURE_PACK/01_Architecture/MASTER_ARCHITECTURE_OVERVIEW.md), before reading implementation code. The older detailed build specification remains available under `docs/architecture/` and is subordinate to the pack. See [docs/ARCHITECTURE_INDEX.md](docs/ARCHITECTURE_INDEX.md) for navigation.

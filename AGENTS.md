@@ -27,6 +27,10 @@ These navigation documents do not override this file's agent instructions or cre
 
 Do not implement functionality from future sprints merely because it seems useful. Keep work within the requested sprint and scope.
 
+## Operating Environments
+
+Development runs in this Windows checkout. The `clawsrv` Ubuntu VPS hosts one staging installation with its own SQLite database and artefact directory. Read [the environment runbook](docs/operations/ENVIRONMENTS.md) before changing or deploying staging. The existing projects were migrated once; subsequent development and staging changes do not synchronize. The VPS Workspace is reachable only through Tailscale and has no application login; keep it off the public internet. Any future cross-platform data copy requires an explicit, integrity-checked migration.
+
 ## Mandatory design principles
 
 - SQLite is authoritative for operational state.

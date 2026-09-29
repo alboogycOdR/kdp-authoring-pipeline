@@ -73,7 +73,7 @@ def _remove_workspace(path: Path) -> None:
         shutil.rmtree(path)
 
 
-def create_project(root: Path, name: str, language: str = "en") -> ProjectRow:
+def create_project(root: Path, name: str, language: str = "en", actor_id: str = "cli-user") -> ProjectRow:
     init_db(root)
     project_id = new_id("PRJ")
     workspace = root / "projects" / project_id
@@ -90,7 +90,7 @@ def create_project(root: Path, name: str, language: str = "en") -> ProjectRow:
             session.add(row)
             AuditEventWriter.append(
                 session,
-                actor_id="cli-user",
+                actor_id=actor_id,
                 action="project.create",
                 entity_type="project",
                 entity_id=project_id,
@@ -112,7 +112,8 @@ def create_project(root: Path, name: str, language: str = "en") -> ProjectRow:
         raise
 
 
-def create_title(root: Path, project_id: str, working_title: str, language: str = "en") -> TitleRow:
+def create_title(root: Path, project_id: str, working_title: str, language: str = "en",
+                 actor_id: str = "cli-user") -> TitleRow:
     title_id = new_id("BK")
     workspace = root / "projects" / project_id / "titles" / title_id
     with session_scope(root) as session:
@@ -133,7 +134,7 @@ def create_title(root: Path, project_id: str, working_title: str, language: str 
             session.add(row)
             AuditEventWriter.append(
                 session,
-                actor_id="cli-user",
+                actor_id=actor_id,
                 action="title.create",
                 entity_type="title",
                 entity_id=title_id,

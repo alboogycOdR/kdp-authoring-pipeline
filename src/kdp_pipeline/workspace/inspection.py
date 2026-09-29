@@ -8,7 +8,7 @@ from sqlalchemy import select
 from kdp_pipeline.inspection.service import _read_only_session, inspect_title
 from kdp_pipeline.providers.costs import project_budget_report
 from kdp_pipeline.storage.db import (
-    AuditEventRow,
+    AuditEventRow, ModelPricingRow,
     ProjectProviderSelectionRow,
     ProjectRow,
     ProviderProfileRow,
@@ -58,6 +58,15 @@ def inspect_workspace(root: Path) -> dict:
             "timestamp": row.timestamp_utc.isoformat(),
             "correlation_id": row.correlation_id,
         } for row in activity_rows]
+        profiles = list(session.scalars(select(ProviderProfileRow).where(
+            ProviderProfileRow.enabled.is_(True)).order_by(ProviderProfileRow.display_name)))
+        available_providers = [{
+            "provider_id": row.provider_id,
+            "display_name": row.display_name,
+            "model": row.model,
+            "ready": row.provider_type != "openai-compatible" or bool(row.api_key_env and os.getenv(row.api_key_env)),
+            "priced": session.get(ModelPricingRow, (row.provider_id, row.model)) is not None,
+        } for row in profiles]
 
     title_reports = {title_id: inspect_title(root, title_id) for title in titles for title_id in [title.title_id]}
     budgets = {project["project_id"]: project_budget_report(root, project["project_id"]) for project in project_rows}
@@ -65,5 +74,6 @@ def inspect_workspace(root: Path) -> dict:
         "projects": project_rows,
         "titles": title_reports,
         "budgets": budgets,
+        "available_providers": available_providers,
         "recent_activity": recent_activity,
     }

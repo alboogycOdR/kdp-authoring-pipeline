@@ -25,6 +25,7 @@ The pack also reserves directories for Sprint 1â€“13 core materials, Sprint 14â€
 
 ## Operational documentation
 
+- [Environment topology and operations](operations/ENVIRONMENTS.md)
 - [Concept workflow](operations/CONCEPT_WORKFLOW.md)
 - [Chapter orchestration](operations/CHAPTER_ORCHESTRATION.md)
 - [Editorial passes](operations/EDITORIAL_PASSES.md)

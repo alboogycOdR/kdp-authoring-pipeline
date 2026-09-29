@@ -5,6 +5,39 @@ explicit verification, chapter queue, Markdown build, and release preparation ac
 Each action calls the existing audited service; the Workspace does not write operational
 state directly.
 
+## Start and author a book in the browser
+
+The **Help** link in the Workspace header opens a visual, plain-language guide at `/help`.
+It takes a new creator from saving an idea through concept, planning, chapter drafting,
+verification, and release preparation without requiring CLI or server access.
+
+The Workspace home page now starts with **Start a new book**. Enter a project name, working
+title, intended reader, and starting idea. Select a ready, priced provider and choose monthly
+and per-request USD hard limits. Creation saves a human-authored idea note, project, title,
+provider selection, and budget without making a provider call. A project page can also add a
+title or change its provider and hard limits. An existing new title can save its idea on its
+title page. Browser users need no CLI or server access for these tasks.
+
+Open the new title and use **Book authoring** in order: develop and validate a concept, review
+and accept its concept brief, generate and accept positioning, brief, outline, and chapter
+cards, advance the planning gates, then draft one chapter at a time. Continuity,
+developmental, and other editorial passes are available for an experimental chapter.
+**Edit in browser** creates a new experimental manual revision of a concept, planning
+artefact, or chapter while retaining the original and provenance. Review pages remain the
+only browser acceptance path. A chapter summary can carry context into later chapter work.
+
+Every browser generation form identifies that it calls the selected provider, requires the
+operator's name and an explicit cost acknowledgment, and checks for configured model pricing
+and a hard-stop project budget before calling. Each request and resulting job are audited.
+The profile, known cost, unknown-cost events, and budget limits remain visible on the title.
+The provider's billing report is authoritative for charges. Failed or unclear requests must
+be inspected before any deliberate retry.
+
+After authoring, the existing title actions and review pages cover Scripture/source/claim/
+research verification, rights, Markdown build, release candidate, review packet, and human
+release review. Browser actions never supply evidence or approve automatically. Final KDP
+upload and publication remain manual outside the Workspace.
+
 Start it from the repository root:
 
 ```powershell
@@ -13,6 +46,10 @@ kdp workspace serve
 
 The server binds only to `127.0.0.1` (port `8765` by default). Open the printed local address
 in a browser and stop the server with `Ctrl+C`. Use `--port` to choose another local port.
+The Ubuntu staging installation keeps this loopback binding behind a Tailscale-bound proxy.
+Its URL, service names, and data boundary are recorded in the [environment runbook](ENVIRONMENTS.md).
+The proxy does not add an application login; access
+depends on Tailscale membership and ACLs.
 The Workspace lists work needing review, approval, verification, or unblocking first, followed
 by ready titles, recent activity, projects, and titles. Project and title pages show the
 existing provider/budget, planning, chapter, editorial/canon, verification/rights, build, and

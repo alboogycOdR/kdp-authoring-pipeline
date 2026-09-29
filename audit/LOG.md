@@ -24,3 +24,5 @@
 | 14:09 | Exported patches; `git apply --check` clean on fresh `91c48ad`; clean-checkout run: 122 passed / 33 audit passed; baseline audit: 27 failed / 6 passed; pyflakes count unchanged (9 = 9) |
 | 14:15 | Replaced a canary that matched the AWS key-ID pattern; regenerated evidence; gitleaks on `audit/` clean |
 | 14:20 | Report and design documents written |
+| 16:20 | Resumed on Opus 4.8 (the earlier interruption no longer applies). Built `lab/c1_chain.py` and `tests/test_ws_b_workspace.py`: C1 forged-approval chain reproduced end-to-end over HTTP (19 requests → approved release packet under invented names). Added WS-B fixes (same-origin POST signal, HEAD mirrors GET, headers on all responses, opt-in identity gate) to the patch; updated 5 repo workspace tests to send `Sec-Fetch-Site: same-origin`. |
+| 16:35 | Regenerated ALL patch (applies clean to 91c48ad). Clean-checkout verification: original suite 122 passed/1 skipped; audit suite 41 tests — baseline 31 failed/10 passed, patched all 41 pass. WS-B coverage now Complete (AUD-002 proxy topology analytical). |

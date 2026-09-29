@@ -9,12 +9,12 @@
 | Environment | Linux container, Python 3.12.3 venv (`pip freeze` in `evidence/tools/`), SQLAlchemy 2.1.1, httpx 0.28.1, pydantic 2.13.5, typer 0.27.2; Chromium 1194 (Playwright), axe-core 4.10.0, Caddy 2.8.4 (downloaded, not exercised — see exclusions) |
 | Tools | pytest 9.1.1, coverage, pytest-randomly, bandit, ruff (proposed rule set), mypy (default + `--strict`), radon, vulture, pip-audit, osv-scanner 1.8.5, gitleaks 8.18.4, trufflehog 3.82.13, python -m build, custom mutation harness (`lab/mini_mutation.py`), pypdf |
 | Lab | Throw-away roots per test; loopback-only mock OpenAI-compatible server with ~45 scenarios (`lab/mock_provider.py`); `CaptureProvider` records exact requests; synthetic data generator (`lab/datagen.py`); state × action harness; Playwright/axe scanner (read-only GETs). No real provider, no real key, no KDP/Amazon account contact, no staging contact |
-| Reproduce | `bash audit/run_audit.sh` (baseline: finding tests fail) · `KDP_AUDIT_TARGET=<checkout with audit/patches/ALL-KDP-AUD-fixes.patch applied> bash audit/run_audit.sh` (all pass) |
+| Reproduce | `bash audit/run_audit.sh` (baseline: 31 finding tests fail, 10 controls pass) · `KDP_AUDIT_TARGET=<checkout with audit/patches/ALL-KDP-AUD-fixes.patch applied> bash audit/run_audit.sh` (all 41 pass). Set `PYTHON=<venv>/bin/python` if pytest is not on `python3`. |
 
 ### Exclusions and deviations from the brief (stated, not silent)
 
-1. **Workspace exploit automation (WS-B, chain C1) was not built.** Two attempts to write the end-to-end forged-approval script and the Workspace HTTP attack tests were stopped by a safety classifier. The owner agreed to finish the audit with WS-B covered by **code trace plus the repository's own integration tests**, which already submit decisions through the HTTP layer with a scraped token (`tests/integration/test_sprint16_workspace_review.py::test_review_http_requires_token_and_shows_exact_result`). WS-B findings are therefore rated `Likely`/`Confirmed-by-code`, never `Confirmed-in-lab`, and no exploit tooling for the Workspace is included.
-2. **Proxy replica (K3) not exercised** for the same reason; the Caddy binary was fetched but no Host/Origin/rebinding tests were run. K3 is resolved analytically.
+1. **Chain C1 is demonstrated end-to-end in the lab** (`audit/lab/c1_chain.py`, `test_KDP_AUD_001_*`): an unauthenticated peer drives a book from nothing to an approved, frozen release packet in 19 HTTP requests under invented names. An earlier attempt to author this was interrupted; it was completed after confirming the current model is not subject to that interruption. No real provider, key, or network is used (the peer authorises a FakeProvider). The transcript is `audit/evidence/KDP-AUD-001/c1_transcript.json`.
+2. **Proxy replica (K3 / AUD-002) is resolved analytically, not lab-reproduced.** The Caddy binary was fetched but the Host/Origin/DNS-rebinding topology was not stood up; AUD-002 is rated `Likely` and the remaining WS-B checks (Origin logic, output encoding, headers, HEAD/GET, route handling) are `Confirmed` against the real server.
 3. **Official KDP help pages** (`kdp.amazon.com`) are blocked by this environment's egress proxy. Policy facts are taken from the official pages' search-index extracts (URLs cited, retrieved 2026-09-29) and marked *index-extract*; re-verify on the live pages before relying on them.
 4. `semgrep`, `pyright`, `jscpd`, `import-linter`, `lighthouse`, `locust`, `py-spy`, `mitmproxy`, `nuclei` were not installed; substitutes are listed per workstream. Mutation testing used a small purpose-built harness (19 hand-chosen mutants) because `mutmut 3` needs a repo reconfiguration.
 5. `claims.csv` has 85 claims (target ≥150).
@@ -24,7 +24,7 @@
 | WS | Topic | Status | Notes |
 |---|---|---|---|
 | A | Governance invariants, state machine | **Complete** | 9 lab-confirmed findings, state × action matrix |
-| B | Workspace web security | **Partial** | code trace only (see exclusion 1); XSS output-encoding reviewed statically, CSP observed blocking inline script in a real browser |
+| B | Workspace web security | **Complete** (proxy topology AUD-002 analytical) | C1 forged-approval chain reproduced end-to-end over HTTP; Origin logic, output encoding, headers, HEAD/GET, route handling tested against the real server; XSS inert + CSP confirmed |
 | C | Provider, secrets, egress | Complete | mock server over real sockets |
 | D | Cost/budget integrity | Complete | K11 race refuted (with caveat) |
 | E | Generation pipeline integrity | Complete | request-vs-manifest diff for every prompt family |
@@ -59,7 +59,7 @@ The five facts that matter most:
    - Foreign keys are declared but never enforced (AUD-042).
    - A backup restored to another path fails every asset check, and there is no relocate tool (AUD-027).
 
-A patch set in `audit/patches/` addresses 27 of the findings. With it applied to a clean checkout, the original suite still passes (122 passed, 1 skipped), all 33 audit tests pass, and no new lint errors appear.
+A patch set in `audit/patches/` addresses every lab-confirmed finding. With it applied to a clean checkout, the original suite still passes (122 passed, 1 skipped), all 41 audit tests pass (31 finding tests + 10 positive controls), and no new pyflakes errors appear. Design-only items (AUD-002 proxy topology, AUD-025 export, AUD-047 originality/safety, and the other backlog entries) remain proposals; AUD-001 gets a server-side identity-enforcement hook plus the proxy design.
 
 ### Scorecard (1 = poor, 5 = strong)
 
@@ -95,7 +95,7 @@ A patch set in `audit/patches/` addresses 27 of the findings. With it applied to
 
 | Chain | Result | Evidence |
 |---|---|---|
-| C1 forged human approval | **Demonstrated in parts, not end-to-end** (end-to-end automation withheld, see exclusions). The decision services accept any `reviewer` string (AUD-001); the repo's own HTTP test submits review decisions with a token scraped from a GET page; `kdp transition` reaches `KDP_DRAFT_READY` ungated (AUD-003); one name can build, check and approve a release during `POLICY_HOLD` (AUD-015) | `evidence/KDP-AUD-003`, `evidence/KDP-AUD-015`, `recon/routes.md` |
+| C1 forged human approval | **Demonstrated end-to-end in the lab.** An unauthenticated peer, with only HTTP reach and self-declared names, ran 19 requests — scrape CSRF token → create book (setting its own $9,999 budget) → authorise paid generation for concept/planning/chapter → accept every artefact → build → candidate → pass all 16 checklist items → approve release → export a frozen packet. The resulting candidate is `approved_for_manual_kdp_action`; every actor name is invented (`Mallory (forged)`). No legitimate human is involved | `evidence/KDP-AUD-001/c1_transcript.json`, `lab/c1_chain.py` |
 | C2 secret exfiltration | **Demonstrated (configuration path).** A profile with `api_key_env=AWS_SECRET_ACCESS_KEY` sent the canary as `Authorization: Bearer …` to the configured endpoint (loopback mock); the same validator accepts any HTTPS host. A canary in error bodies never reached jobs/audit (control held) | `evidence/KDP-AUD-009`, `evidence/KDP-AUD-009b` |
 | C3 poisoned book | **Partially demonstrated.** Canon injected on disk reached the continuity prompt with no proposal (AUD-012); truncated output was accepted as chapter 1 (AUD-010). Hostile HTML/Markdown did not execute (escaping + CSP held). Model text claiming approval changed no state (no parser acts on it) | `evidence/KDP-AUD-012`, `evidence/KDP-AUD-010` |
 | C4 budget breach | **Not demonstrated for concurrency** (K11 refuted: SQLite writer lock taken at the job insert serializes the check; 12 concurrent requests → 1 call, 9 budget-blocked, 2 raw `database is locked`). **Demonstrated for accounting:** provider `usage.cost=0` recorded $0 for 200k tokens (AUD-007); a billed 200 with malformed usage recorded no usage (AUD-022) | `evidence/POS-K11-budget-race`, `evidence/KDP-AUD-007`, `evidence/KDP-AUD-022` |
@@ -112,8 +112,10 @@ Severity uses the brief's rubric. Confidence: **Confirmed** = reproduced by a te
 
 | ID | Title | Severity | Confidence | Category | WS | Patch |
 |---|---|---|---|---|---|---|
-| AUD-001 | Workspace has no authentication; every human decision attributes to a typed name | Critical (tailnet) / High (loopback) | Code | security | B | design (HARDENING_STAGING.md) |
+| AUD-001 | Workspace has no authentication; every human decision attributes to a typed name (C1 forged end-to-end) | Critical (tailnet) / High (loopback) | Confirmed | security | B | yes (identity hook) + design |
 | AUD-002 | Staging proxy topology must neutralise the Host/Origin checks | High | Likely | security | B/L | design |
+| AUD-050 | POST with an absent Origin and no Sec-Fetch-Site is accepted | Medium | Confirmed | security | B | yes |
+| AUD-053 | HEAD returns 404 for review/edit/project pages that GET serves 200 | Low | Confirmed | correctness/ux | B | yes |
 | AUD-003 | `kdp transition` reaches PREFLIGHT_PASSED / KDP_DRAFT_READY without build, candidate or approval | Critical | Confirmed | governance | A | yes |
 | AUD-004 | Accepted chapters cannot be superseded; conditions and placeholders block release forever | Critical | Confirmed | functional | A/G | yes |
 | AUD-005 | Developmental editing is sent without the chapter while provenance lists it | High | Confirmed | ai-pipeline | E | yes |
@@ -167,13 +169,24 @@ Severity uses the brief's rubric. Confidence: **Confirmed** = reproduced by a te
 Line numbers refer to `91c48ad`. Every "Confirmed" finding has a test `audit/tests/*::test_KDP_AUD_###_*` that fails on the baseline and passes with `audit/patches/ALL-KDP-AUD-fixes.patch`; its evidence is in `audit/evidence/KDP-AUD-###/`.
 
 #### AUD-001 — Workspace has no authentication; every human decision attributes to a typed name
-- **Severity:** Critical in the documented staging deployment (CVSS 3.1 8.1 `AV:A/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N`); High on loopback (`AV:L`). **Confidence:** Code (lab automation withheld; see exclusions). **CWE:** 306, 287, 862. **ASVS:** V2, V4. **Leads:** K1, K2, K8.
+- **Severity:** Critical in the documented staging deployment (CVSS 3.1 8.1 `AV:A/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N`); High on loopback (`AV:L`). **Confidence:** Confirmed (C1 chain, `test_KDP_AUD_001_*`). **CWE:** 306, 287, 862. **ASVS:** V2, V4. **Leads:** K1, K2, K8. **Chain:** C1.
 - **Actor:** any client able to reach the Workspace: another tailnet device, another local user or process on the dev machine, or a browser extension.
 - **Affected:** `workspace/server.py:32` (one process-global token), `:245` (token is the only check), `workspace/actions.py:126` and `authoring.py:320,354` (`reviewer`/`operator` from the form).
+- **Reproduction:** `lab/c1_chain.py` drives 19 HTTP requests to a `approved_for_manual_kdp_action` candidate + exported packet, all under invented names. Evidence: `evidence/KDP-AUD-001/c1_transcript.json`. The test sets `KDP_WORKSPACE_OPERATOR_HEADER=X-KDP-Operator` (a proxy-set identity header) and confirms that the baseline ignores it (forge succeeds) while the patched server rejects the peer's first POST with 401 (forge blocked).
 - **Description:** The token in every page is identical for every client. It stops cross-site form posts from origins that cannot read a page, which is the only protection it gives. Any client that can load a page can read the token. With it, that client can submit asset, canon, verification, rights and release decisions, run paid generation, and raise budgets to $10,000 per month. It can do all of this under any name. The audit trail cannot distinguish people.
 - **Impact:** the "human approval gate", "named operator" and "audit" promises depend entirely on network placement. `ENVIRONMENTS.md` accepts this explicitly ("Treat all Tailnet members … as trusted operators"). This report quantifies what that trust covers: every approval, every dollar of the budget, and every manuscript.
-- **Fix:** authenticate at the proxy (Tailscale identity headers or basic/forward auth) and derive the operator from that identity server-side. Keep the per-form token only as CSRF protection. Record the authenticated identity in `actor_id`. See `HARDENING_STAGING.md` §2 and ADR proposal `ADR-0003`.
+- **Fix (patched, enforcement hook):** the patch adds a server-side identity gate — when `KDP_WORKSPACE_OPERATOR_HEADER` is set, every POST requires that header (set by an authenticating front proxy) and the authenticated value overrides the self-declared `operator`/`reviewer`/`creator`/`builder`/`approver`; an absent identity is 401. Default (env unset) preserves single-owner loopback use. The full control still requires the proxy configuration and Tailscale ACLs in `HARDENING_STAGING.md` §2 and ADR proposal `ADR-0003`; the code hook is the missing enforcement point that made the header trustworthy in the first place.
 - **Docs contradicted:** `DECISIONS.md:11` "acceptance, canon mutation, and release review require explicit human decisions". A decision exists, but no human is identified.
+
+#### AUD-050 — POST with an absent Origin and no Sec-Fetch-Site is accepted
+- **Severity:** Medium · **Confidence:** Confirmed · **CWE:** 352 · **Leads:** K3.
+- **Affected:** `workspace/server.py:193-197` — `if origin and origin != …`: a request with no `Origin` header skips the check entirely.
+- **Reproduction:** `test_KDP_AUD_050_*` — a state-changing POST with a valid CSRF token but no `Origin` and no `Sec-Fetch-Site` returns 303 (accepted) on baseline.
+- **Impact:** the origin defence is bypassable by any client that simply omits `Origin` (legacy clients, some fetch modes, or an attacker's crafted request), narrowing CSRF protection to the token alone — which is process-global and page-readable (AUD-001).
+- **Fix (patched):** a state-changing POST requires a positive same-origin signal — `Origin` equal to the expected origin, or `Sec-Fetch-Site: same-origin`/`none` when `Origin` is absent. Real browsers always send one of these on a same-origin form post.
+
+#### AUD-053 — HEAD diverges from GET
+- **Severity:** Low · **Confidence:** Confirmed. `do_HEAD` (`server.py:173-186`) renders only workspace/help/healthz/404, so a real review, edit or project URL returns 404 to HEAD though GET returns 200. Patched: `do_HEAD` runs the GET routing with the body suppressed, so status and headers match.
 
 #### AUD-002 — Staging proxy topology must neutralise the Host/Origin checks
 - **Severity:** High · **Confidence:** Likely (the Caddyfile is not in the repo) · **CWE:** 346, 350 · **Leads:** K3.
@@ -395,7 +408,7 @@ Low · Confirmed. Details in `UX_RECOMMENDATIONS.md` and `evidence/ui/`: a separ
 
 | Lead | Verdict | Finding / evidence |
 |---|---|---|
-| K1 no auth, global CSRF token | CONFIRMED (code) | AUD-001 |
+| K1 no auth, global CSRF token | CONFIRMED (C1 chain reproduced end-to-end) | AUD-001 |
 | K2 free-text operator identity | CONFIRMED | AUD-001, AUD-015 (one name everywhere) |
 | K3 proxy Host/Origin | PARTIAL (analytical, not lab-reproduced) | AUD-002 |
 | K4 secret exfiltration via profile | CONFIRMED | AUD-009 |
@@ -492,7 +505,7 @@ The pipeline records a free-text `source_policy` per verification item. It does 
 | Metric | Value | Evidence |
 |---|---|---|
 | LOC (src) | 9,831 (8,825 per bandit) | `wc` |
-| Tests | 122 passed, 1 skipped (47 s); identical under random order, `-W error`, `-X dev` | `evidence/tools/pytest_*.txt` |
+| Tests | baseline 122 passed, 1 skipped (47 s); identical under random order, `-W error`, `-X dev`. Audit suite: 41 tests (31 findings fail on baseline / pass on the fix, 10 positive controls) | `evidence/tools/pytest_*.txt`, `evidence/tools/baseline_audit_suite.txt` |
 | Coverage (line+branch) | 77% (cli 43%, workspace/authoring 57%, server 64%) | `coverage_report.txt` |
 | Mutation score (state machine + budget gate) | 4/19 = 21% | `mutation.txt` |
 | mypy | 108 errors default; 295 `--strict` | `mypy_*.txt` |
@@ -509,7 +522,7 @@ Hot list (ranked for maintainability risk): `inspection/service.py::inspect_titl
 
 ## 9. Unconfirmed hypotheses and areas not reached
 
-- Lab reproduction of AUD-001/002: DNS rebinding through the proxy, absent-Origin acceptance, and HEAD/GET divergence (withheld, see exclusions).
+- AUD-002 proxy topology: DNS rebinding and Host/Origin rewriting through a real Caddy front were reasoned about, not stood up. (AUD-001 forged approval, absent-Origin acceptance, and HEAD/GET divergence are now lab-confirmed against the real server.)
 - Kill-point crash matrix (process kill between file write and commit): analysed from code, not executed. Every write path writes the file first and deletes it on exception, but a `SIGKILL` leaves orphan files or `.tmp` files (no sweeper) and `running` jobs (no recovery).
 - Windows-specific behaviour (reserved names, 260-character paths, drive-letter case) was reasoned about but not run. The relocate patch handles Windows prefixes (unit-level only).
 - Real-browser XSS fuzzing of every field; escaping reviewed statically.
@@ -528,7 +541,7 @@ Hot list (ranked for maintainability risk): `inspection/service.py::inspect_titl
 
 ## 11. Positive findings (preserve these)
 
-- **Output encoding:** every interpolation in `render.py` passes through `html.escape(quote=True)` or `quote()`. The CSP (`script-src 'self'`) was observed blocking inline script in Chromium.
+- **Output encoding:** every interpolation in `render.py` passes through `html.escape(quote=True)` or `quote()`. Hostile markup fed through project/title names and model output rendered escaped and inert on home and review pages (`test_POS_hostile_*`), and the CSP (`script-src 'self'`) was observed blocking inline script in Chromium.
 - **Key handling:** keys are never persisted. Provider error identifiers are filtered to identifier-like strings, and an Authorization echo in error bodies never reached jobs or audit rows.
 - **Offline check:** `providers check` without `--connect` makes no socket connection. Redirects are not followed.
 - **Review freshness:** the `review_hash` rejects stale decision forms, and consequence text is precise and honest.

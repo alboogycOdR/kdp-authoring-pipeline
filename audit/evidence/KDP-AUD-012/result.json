@@ -4,7 +4,7 @@
   "doctor_non_ok": [
     {
       "status": "WARN",
-      "check": "provider-selection:PRJ-20260929-D070C561",
+      "check": "provider-selection:PRJ-20260929-B086EF6C",
       "message": "no provider selected",
       "recommended_action": "Select an enabled provider profile before running generation."
     },
@@ -16,7 +16,7 @@
     },
     {
       "status": "FAIL",
-      "check": "canon:BK-20260929-2C5FEC0B:entities.json",
+      "check": "canon:BK-20260929-4903DB0A:entities.json",
       "message": "canon file changed outside the CanonProposal workflow",
       "recommended_action": "Restore the canon file or record the change through an approved proposal; continuity analysis reads it."
     }

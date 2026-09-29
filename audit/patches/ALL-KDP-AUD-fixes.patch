@@ -1163,22 +1163,26 @@ index 7a383f9..4a0a504 100644
                  if chapter_number is None:
                      blockers.append("The chapter number cannot be determined from the artefact path.")
 diff --git a/src/kdp_pipeline/workspace/server.py b/src/kdp_pipeline/workspace/server.py
-index ff53462..91e256b 100644
+index ff53462..d46b336 100644
 --- a/src/kdp_pipeline/workspace/server.py
 +++ b/src/kdp_pipeline/workspace/server.py
-@@ -5,6 +5,7 @@ from importlib.resources import files
+@@ -3,8 +3,10 @@ from __future__ import annotations
+ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+ from importlib.resources import files
  from pathlib import Path
++import os
  from threading import Lock
  from urllib.parse import parse_qs, unquote, urlsplit
 +import logging
  import re
  import secrets
  
-@@ -18,6 +19,15 @@ from kdp_pipeline.workspace.review import inspect_review
+@@ -18,6 +20,16 @@ from kdp_pipeline.workspace.review import inspect_review
  
  
  _ROUTE_ID = re.compile(r"^[A-Za-z0-9-]{1,80}$")
 +_LOG = logging.getLogger("kdp_pipeline.workspace.access")
++_IDENTITY_MISSING = object()
 +_SECURITY_HEADERS = (
 +    ("Cache-Control", "no-store"),
 +    ("X-Content-Type-Options", "nosniff"),
@@ -1190,7 +1194,7 @@ index ff53462..91e256b 100644
  _STATIC_FILES = {
      "workspace.css": ("text/css; charset=utf-8", "static/workspace.css"),
      "workspace.js": ("text/javascript; charset=utf-8", "static/workspace.js"),
-@@ -48,24 +58,38 @@ def create_workspace_server(root: Path, *, port: int = 8765) -> ThreadingHTTPSer
+@@ -48,24 +60,39 @@ def create_workspace_server(root: Path, *, port: int = 8765) -> ThreadingHTTPSer
      class WorkspaceHandler(BaseHTTPRequestHandler):
          server_version = "KDPWorkspace"
          sys_version = ""
@@ -1224,6 +1228,7 @@ index ff53462..91e256b 100644
 +                    pass
  
          def _respond(self, body: str | bytes, content_type: str, status: int = 200, *, head: bool = False) -> None:
++            head = head or getattr(self, "_head", False)
              payload = body.encode("utf-8") if isinstance(body, str) else body
              self.send_response(status)
              self.send_header("Content-Type", content_type)
@@ -1239,7 +1244,79 @@ index ff53462..91e256b 100644
              self.end_headers()
              if not head:
                  self.wfile.write(payload)
-@@ -264,7 +288,6 @@ def create_workspace_server(root: Path, *, port: int = 8765) -> ThreadingHTTPSer
+@@ -171,19 +198,26 @@ def create_workspace_server(root: Path, *, port: int = 8765) -> ThreadingHTTPSer
+             self._respond(render_not_found(), "text/html; charset=utf-8", 404)
+ 
+         def do_HEAD(self) -> None:
+-            if not self._valid_host():
+-                self._respond(render_not_found("This workspace accepts requests for localhost only."),
+-                              "text/html; charset=utf-8", 421, head=True)
+-                return
+-            parts = urlsplit(self.path)
+-            if parts.path == "/healthz":
+-                self._respond("ok", "text/plain; charset=utf-8", head=True)
+-            elif parts.path == "/help":
+-                self._respond(render_help(), "text/html; charset=utf-8", head=True)
+-            elif parts.path in {"/", "/projects", "/titles"}:
+-                self._respond(render_workspace(self._snapshot()), "text/html; charset=utf-8", head=True)
+-            else:
+-                self._respond(render_not_found(), "text/html; charset=utf-8", 404, head=True)
++            # HEAD must return the same status as GET for the same resource (KDP-AUD-053).
++            self._head = True
++            self.do_GET()
++
++        def _require_operator_identity(self):
++            """When configured, the operator identity comes from a header the front proxy sets after
++            authenticating the user, and is required for any state change (KDP-AUD-001).
++
++            Default (env unset) preserves single-owner loopback use. The header is trusted only because
++            the app is bound to loopback behind a proxy that authenticates and sets it; deployments must
++            ensure clients cannot reach the app directly (see audit/HARDENING_STAGING.md)."""
++            header = os.getenv("KDP_WORKSPACE_OPERATOR_HEADER")
++            if not header:
++                return None
++            value = self.headers.get(header, "").strip()[:100]
++            if not value:
++                self._respond(render_not_found("This workspace requires an authenticated operator."),
++                              "text/html; charset=utf-8", 401)
++                return _IDENTITY_MISSING
++            return value
+ 
+         def do_POST(self) -> None:
+             if not self._valid_host():
+@@ -191,10 +225,18 @@ def create_workspace_server(root: Path, *, port: int = 8765) -> ThreadingHTTPSer
+                               "text/html; charset=utf-8", 421)
+                 return
+             origin = self.headers.get("Origin")
+-            if origin and origin != f"http://{self.headers.get('Host')}":
++            fetch_site = self.headers.get("Sec-Fetch-Site", "").lower()
++            expected_origin = f"http://{self.headers.get('Host')}"
++            same_origin = origin == expected_origin or (origin is None and fetch_site in {"same-origin", "none"})
++            if not same_origin:
++                # A state-changing POST needs a positive same-origin signal; an absent Origin with no
++                # Sec-Fetch-Site is treated as cross-site, not trusted (KDP-AUD-050).
+                 self._respond(render_not_found("Request origin did not match this workspace."),
+                               "text/html; charset=utf-8", 403)
+                 return
++            operator_identity = self._require_operator_identity()
++            if operator_identity is _IDENTITY_MISSING:
++                return
+             path = urlsplit(self.path).path
+             match = re.fullmatch(r"/titles/([^/]+)/actions/([a-z-]+)", path)
+             project_match = re.fullmatch(r"/projects/([^/]+)/actions/(controls|new-title)", path)
+@@ -246,6 +288,11 @@ def create_workspace_server(root: Path, *, port: int = 8765) -> ThreadingHTTPSer
+                 self._respond(render_not_found("Reload the Workspace and submit the form again."),
+                               "text/html; charset=utf-8", 403)
+                 return
++            if operator_identity is not None:
++                # Every audited actor name comes from the authenticated identity, not the form (KDP-AUD-001).
++                for field in ("operator", "reviewer", "creator", "builder", "approver"):
++                    if field in form:
++                        form[field] = operator_identity
+             if edit_match:
+                 try:
+                     result = create_manual_revision(root, title_id, asset_id, form)
+@@ -264,7 +311,6 @@ def create_workspace_server(root: Path, *, port: int = 8765) -> ThreadingHTTPSer
                  self.send_response(303)
                  self.send_header("Location", f"/titles/{title_id}?result={flash_id}#pending")
                  self.send_header("Content-Length", "0")
@@ -1247,7 +1324,7 @@ index ff53462..91e256b 100644
                  self.end_headers()
                  return
              if book_match or project_match:
-@@ -285,7 +308,6 @@ def create_workspace_server(root: Path, *, port: int = 8765) -> ThreadingHTTPSer
+@@ -285,7 +331,6 @@ def create_workspace_server(root: Path, *, port: int = 8765) -> ThreadingHTTPSer
                  self.send_response(303)
                  self.send_header("Location", f"{location}?result={flash_id}")
                  self.send_header("Content-Length", "0")
@@ -1255,7 +1332,7 @@ index ff53462..91e256b 100644
                  self.end_headers()
                  return
              if review_match:
-@@ -306,7 +328,6 @@ def create_workspace_server(root: Path, *, port: int = 8765) -> ThreadingHTTPSer
+@@ -306,7 +351,6 @@ def create_workspace_server(root: Path, *, port: int = 8765) -> ThreadingHTTPSer
                  self.send_response(303)
                  self.send_header("Location", f"/reviews/{kind}/{identifier}?result={flash_id}")
                  self.send_header("Content-Length", "0")
@@ -1263,7 +1340,7 @@ index ff53462..91e256b 100644
                  self.end_headers()
                  return
              try:
-@@ -329,14 +350,12 @@ def create_workspace_server(root: Path, *, port: int = 8765) -> ThreadingHTTPSer
+@@ -329,14 +373,12 @@ def create_workspace_server(root: Path, *, port: int = 8765) -> ThreadingHTTPSer
              else:
                  self.send_header("Location", f"/titles/{title_id}?done={action}#actions")
              self.send_header("Content-Length", "0")
@@ -1292,10 +1369,52 @@ index 0000000..d72252e
 +import os
 +
 +os.environ.setdefault("KDP_PROVIDER_HOST_ALLOWLIST", "provider.example")
+diff --git a/tests/integration/test_sprint14_workspace_ui.py b/tests/integration/test_sprint14_workspace_ui.py
+index e9f1acf..5bcf722 100644
+--- a/tests/integration/test_sprint14_workspace_ui.py
++++ b/tests/integration/test_sprint14_workspace_ui.py
+@@ -109,7 +109,7 @@ def test_workspace_server_is_loopback_read_only_and_serves_packaged_assets(tmp_p
+         assert 'body[data-theme="dark"]' in css
+         assert 'body[data-theme="brand"]' in css
+ 
+-        connection.request("POST", "/")
++        connection.request("POST", "/", headers={"Sec-Fetch-Site": "same-origin"})
+         response = connection.getresponse()
+         assert response.status == 405
+         assert response.headers.get("Allow") == "GET, HEAD"
+diff --git a/tests/integration/test_sprint15_workspace_actions.py b/tests/integration/test_sprint15_workspace_actions.py
+index 43a589f..0235e4b 100644
+--- a/tests/integration/test_sprint15_workspace_actions.py
++++ b/tests/integration/test_sprint15_workspace_actions.py
+@@ -54,7 +54,7 @@ def _accepted_title(root: Path) -> tuple[str, str]:
+ 
+ def _post(connection: HTTPConnection, title_id: str, action: str, fields: dict[str, str],
+           *, origin: str | None = None):
+-    headers = {"Content-Type": "application/x-www-form-urlencoded"}
++    headers = {"Content-Type": "application/x-www-form-urlencoded", "Sec-Fetch-Site": "same-origin"}
+     if origin:
+         headers["Origin"] = origin
+     connection.request("POST", f"/titles/{title_id}/actions/{action}",
 diff --git a/tests/integration/test_sprint16_workspace_review.py b/tests/integration/test_sprint16_workspace_review.py
-index 032a676..f22a5b7 100644
+index 032a676..5b9c579 100644
 --- a/tests/integration/test_sprint16_workspace_review.py
 +++ b/tests/integration/test_sprint16_workspace_review.py
+@@ -168,13 +168,13 @@ def test_review_http_requires_token_and_shows_exact_result(tmp_path: Path):
+         form = {"review_hash": review_hash, "confirm_consequences": "yes",
+                 "reviewer": "web-reviewer", "decision": "accept"}
+         connection.request("POST", f"/reviews/asset/{draft_id}/decide", body=urlencode(form),
+-                           headers={"Content-Type": "application/x-www-form-urlencoded"})
++                           headers={"Content-Type": "application/x-www-form-urlencoded", "Sec-Fetch-Site": "same-origin"})
+         response = connection.getresponse()
+         assert response.status == 403
+         response.read()
+         form["csrf_token"] = token
+         connection.request("POST", f"/reviews/asset/{draft_id}/decide", body=urlencode(form),
+-                           headers={"Content-Type": "application/x-www-form-urlencoded"})
++                           headers={"Content-Type": "application/x-www-form-urlencoded", "Sec-Fetch-Site": "same-origin"})
+         response = connection.getresponse()
+         assert response.status == 303
+         redirect = response.headers["Location"]
 @@ -255,7 +255,8 @@ def test_release_approval_requires_every_human_check_and_keeps_manual_publicatio
              run_release_check(tmp_path, candidate.candidate_id, {
                  "review_hash": current["review_hash"], "confirm_consequences": "yes",
@@ -1319,6 +1438,44 @@ index ed54d23..8a9640b 100644
          "reasoning_effort": "low",
          "timeouts_seconds": {"connect": 60.0, "read": 180.0, "write": 60.0, "pool": 60.0},
      }
+diff --git a/tests/integration/test_workspace_authoring.py b/tests/integration/test_workspace_authoring.py
+index 58d2835..9f9d70f 100644
+--- a/tests/integration/test_workspace_authoring.py
++++ b/tests/integration/test_workspace_authoring.py
+@@ -82,14 +82,14 @@ def test_browser_start_form_creates_book_without_provider_call(tmp_path: Path):
+         token = re.search(r'name="csrf_token" value="([^"]+)"', page).group(1)
+ 
+         connection.request("POST", "/books", body=urlencode(_fields()),
+-                           headers={"Content-Type": "application/x-www-form-urlencoded"})
++                           headers={"Content-Type": "application/x-www-form-urlencoded", "Sec-Fetch-Site": "same-origin"})
+         response = connection.getresponse()
+         response.read()
+         assert response.status == 403
+         assert inspect_workspace(tmp_path)["projects"] == []
+ 
+         connection.request("POST", "/books", body=urlencode({**_fields(), "csrf_token": token}),
+-                           headers={"Content-Type": "application/x-www-form-urlencoded"})
++                           headers={"Content-Type": "application/x-www-form-urlencoded", "Sec-Fetch-Site": "same-origin"})
+         response = connection.getresponse()
+         response.read()
+         assert response.status == 303
+@@ -105,14 +105,14 @@ def test_browser_start_form_creates_book_without_provider_call(tmp_path: Path):
+         connection.request("POST", f"/titles/{title_id}/actions/audience-brief",
+             body=urlencode({"csrf_token": token, "operator": "reader-editor",
+                             "audience": "Adult beginners"}),
+-            headers={"Content-Type": "application/x-www-form-urlencoded"})
++            headers={"Content-Type": "application/x-www-form-urlencoded", "Sec-Fetch-Site": "same-origin"})
+         response = connection.getresponse()
+         response.read()
+         assert response.status == 422
+         connection.request("POST", f"/titles/{title_id}/actions/audience-brief",
+             body=urlencode({"csrf_token": token, "operator": "reader-editor",
+                             "audience": "Adult beginners", "confirm_cost": "yes"}),
+-            headers={"Content-Type": "application/x-www-form-urlencoded"})
++            headers={"Content-Type": "application/x-www-form-urlencoded", "Sec-Fetch-Site": "same-origin"})
+         response = connection.getresponse()
+         response.read()
+         assert response.status == 303
 diff --git a/tests/unit/test_planning_contracts.py b/tests/unit/test_planning_contracts.py
 index 9d9db48..bc0e961 100644
 --- a/tests/unit/test_planning_contracts.py

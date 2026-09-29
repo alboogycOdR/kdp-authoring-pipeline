@@ -1,0 +1,17 @@
+{
+  "title_id": null,
+  "candidate_id": null,
+  "packet_id": null,
+  "candidate_status": "blocked",
+  "candidate_created_by": null,
+  "release_approvals": [],
+  "distinct_actor_names": [],
+  "steps": [
+    {
+      "n": 1,
+      "label": "POST /books BLOCKED (status 401) \u2014 no authenticated operator",
+      "status": 401,
+      "note": ""
+    }
+  ]
+}

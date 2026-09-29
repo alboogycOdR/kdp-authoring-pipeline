@@ -1,0 +1,26 @@
+{
+  "redirect_status": 303,
+  "redirect_headers": {
+    "Server": "KDPWorkspace ",
+    "Date": "Tue, 29 Sep 2026 16:42:54 GMT",
+    "Location": "/titles/BK-20260929-15BDD23F?done=scan-scripture#actions",
+    "Content-Length": "0",
+    "Cache-Control": "no-store",
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer",
+    "X-Frame-Options": "DENY",
+    "Content-Security-Policy": "default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+  },
+  "method_not_allowed_status": 405,
+  "mna_headers": {
+    "Server": "KDPWorkspace ",
+    "Date": "Tue, 29 Sep 2026 16:42:54 GMT",
+    "Allow": "GET, HEAD",
+    "Content-Length": "0",
+    "Cache-Control": "no-store",
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer",
+    "X-Frame-Options": "DENY",
+    "Content-Security-Policy": "default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+  }
+}

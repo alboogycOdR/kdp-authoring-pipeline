@@ -1,7 +1,7 @@
 [
   {
     "status": "WARN",
-    "check": "provider-selection:PRJ-20260929-4A420B95",
+    "check": "provider-selection:PRJ-20260929-C6448AA2",
     "message": "no provider selected",
     "recommended_action": "Select an enabled provider profile before running generation."
   },
@@ -13,13 +13,13 @@
   },
   {
     "status": "FAIL",
-    "check": "asset:AST-20260929-EE929AE9",
+    "check": "asset:AST-20260929-50886D2D",
     "message": "file is missing",
     "recommended_action": "Restore the file or remove the stale operational record through an explicit maintenance procedure."
   },
   {
     "status": "FAIL",
-    "check": "asset:AST-20260929-070B80ED",
+    "check": "asset:AST-20260929-61A281FB",
     "message": "hash mismatch",
     "recommended_action": "Do not repair automatically; investigate the source file and approval history."
   }

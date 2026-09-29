@@ -203,8 +203,12 @@ class Workspace:
         return match.group(1)
 
     def post(self, path: str, fields: dict[str, str], headers: dict | None = None, **kw: Any) -> tuple[int, dict, str]:
-        hdrs = {"Content-Type": "application/x-www-form-urlencoded"}
+        # Default to a same-origin Origin, as a real browser form post does; callers override to
+        # simulate cross-site or legacy (no-Origin) clients. `Origin: None` drops the header.
+        hdrs = {"Content-Type": "application/x-www-form-urlencoded", "Origin": f"http://{self.host}"}
         hdrs.update(headers or {})
+        if hdrs.get("Origin") is None:
+            hdrs.pop("Origin", None)
         return self.request("POST", path, urlencode(fields), hdrs, **kw)
 
     def review_hash(self, kind: str, identifier: str) -> str:

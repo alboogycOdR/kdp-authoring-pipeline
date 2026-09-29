@@ -1,6 +1,6 @@
 {
-  "old_root": "/tmp/pytest-of-root/pytest-49/test_KDP_AUD_027_relocated_wor0/ws",
-  "new_root": "/tmp/pytest-of-root/pytest-49/test_KDP_AUD_027_relocated_wor0/restored-elsewhere",
+  "old_root": "/tmp/pytest-of-root/pytest-65/test_KDP_AUD_027_relocated_wor0/ws",
+  "new_root": "/tmp/pytest-of-root/pytest-65/test_KDP_AUD_027_relocated_wor0/restored-elsewhere",
   "rewritten": {
     "assets.path": 10
   },

@@ -1,7 +1,7 @@
 # Book brief
 
 Title: Book
-Title ID: BK-20260929-7560B000
+Title ID: BK-20260929-0CC4FAB6
 Target reader: unspecified
 
 Produce an experimental book brief covering the concept, reader promise, scope, tone, and success criteria. Use only supplied context.
@@ -9,5 +9,5 @@ Produce an experimental book brief covering the concept, reader promise, scope, 
 
 Accepted context supplied for this request (operator idea, accepted concept brief, and previously accepted planning artefacts). Use it; do not contradict it silently.
 
-## planning.positioning (asset AST-20260929-7E3D0FBB)
+## planning.positioning (asset AST-20260929-4291727E)
 POSITIONING-MARKER-4471: teens, faith, money.

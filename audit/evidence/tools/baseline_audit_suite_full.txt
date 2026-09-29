@@ -1,8 +1,8 @@
-FFFFFFFFFF..F.FFFFFFFFFF.FFF.F.FF                                        [100%]
+FFFFFFFFFF...F.FFF..F.FFFFFFFFFF.FFF.F.FF                                [100%]
 =================================== FAILURES ===================================
 _ test_KDP_AUD_003_cli_transition_reaches_kdp_draft_ready_without_preflight_or_release_approval _
 
-root = PosixPath('/tmp/pytest-of-root/pytest-46/test_KDP_AUD_003_cli_transitio0/ws')
+root = PosixPath('/tmp/pytest-of-root/pytest-62/test_KDP_AUD_003_cli_transitio0/ws')
 evidence = PosixPath('/home/user/kdp-authoring-pipeline/audit/evidence/KDP-AUD-003')
 
     def test_KDP_AUD_003_cli_transition_reaches_kdp_draft_ready_without_preflight_or_release_approval(root, evidence):
@@ -33,7 +33,7 @@ E       assert ('PREFLIGHT_PASSED' not in ['EDITING', 'ASSET_READY', 'PREFLIGHT_
 audit/tests/test_ws_a_governance.py:54: AssertionError
 _ test_KDP_AUD_004_accepted_chapter_cannot_be_superseded_so_conditions_block_release_forever _
 
-root = PosixPath('/tmp/pytest-of-root/pytest-46/test_KDP_AUD_004_accepted_chap0/ws')
+root = PosixPath('/tmp/pytest-of-root/pytest-62/test_KDP_AUD_004_accepted_chap0/ws')
 evidence = PosixPath('/home/user/kdp-authoring-pipeline/audit/evidence/KDP-AUD-004')
 
     def test_KDP_AUD_004_accepted_chapter_cannot_be_superseded_so_conditions_block_release_forever(root, evidence):
@@ -63,7 +63,7 @@ E       assert "TypeError: accept_chapter() got an unexpected keyword argument '
 audit/tests/test_ws_a_governance.py:79: AssertionError
 _ test_KDP_AUD_015_release_approved_while_title_in_policy_hold_by_one_self_declared_person _
 
-root = PosixPath('/tmp/pytest-of-root/pytest-46/test_KDP_AUD_015_release_appro0/ws')
+root = PosixPath('/tmp/pytest-of-root/pytest-62/test_KDP_AUD_015_release_appro0/ws')
 evidence = PosixPath('/home/user/kdp-authoring-pipeline/audit/evidence/KDP-AUD-015')
 
     def test_KDP_AUD_015_release_approved_while_title_in_policy_hold_by_one_self_declared_person(root, evidence):
@@ -83,12 +83,12 @@ evidence = PosixPath('/home/user/kdp-authoring-pipeline/audit/evidence/KDP-AUD-0
             "Release approved while title is in POLICY_HOLD, by the same person who built, froze and checked it"
 E       AssertionError: Release approved while title is in POLICY_HOLD, by the same person who built, froze and checked it
 E       assert 'approved_for_manual_kdp_action' != 'approved_for_manual_kdp_action'
-E        +  where 'approved_for_manual_kdp_action' = <kdp_pipeline.storage.db.ReleaseCandidateRow object at 0x7fa9b3686ae0>.status
+E        +  where 'approved_for_manual_kdp_action' = <kdp_pipeline.storage.db.ReleaseCandidateRow object at 0x7fe9adc8b6b0>.status
 
 audit/tests/test_ws_a_governance.py:95: AssertionError
 __ test_KDP_AUD_016_chapter_acceptance_ignores_title_state_and_chapter_number __
 
-root = PosixPath('/tmp/pytest-of-root/pytest-46/test_KDP_AUD_016_chapter_accep0/ws')
+root = PosixPath('/tmp/pytest-of-root/pytest-62/test_KDP_AUD_016_chapter_accep0/ws')
 evidence = PosixPath('/home/user/kdp-authoring-pipeline/audit/evidence/KDP-AUD-016')
 
     def test_KDP_AUD_016_chapter_acceptance_ignores_title_state_and_chapter_number(root, evidence):
@@ -109,7 +109,7 @@ E       assert 'error' in {'accepted_as': 'chapter-001.md', 'title_state': 'POLI
 audit/tests/test_ws_a_governance.py:110: AssertionError
 ______________ test_KDP_AUD_021_audit_log_rewrite_is_undetectable ______________
 
-root = PosixPath('/tmp/pytest-of-root/pytest-46/test_KDP_AUD_021_audit_log_rew0/ws')
+root = PosixPath('/tmp/pytest-of-root/pytest-62/test_KDP_AUD_021_audit_log_rew0/ws')
 evidence = PosixPath('/home/user/kdp-authoring-pipeline/audit/evidence/KDP-AUD-021')
 
     def test_KDP_AUD_021_audit_log_rewrite_is_undetectable(root, evidence):
@@ -131,7 +131,7 @@ E       assert []
 audit/tests/test_ws_a_governance.py:125: AssertionError
 _ test_KDP_AUD_012_canon_files_edited_on_disk_are_fed_to_the_model_undetected __
 
-root = PosixPath('/tmp/pytest-of-root/pytest-46/test_KDP_AUD_012_canon_files_e0/ws')
+root = PosixPath('/tmp/pytest-of-root/pytest-62/test_KDP_AUD_012_canon_files_e0/ws')
 evidence = PosixPath('/home/user/kdp-authoring-pipeline/audit/evidence/KDP-AUD-012')
 
     def test_KDP_AUD_012_canon_files_edited_on_disk_are_fed_to_the_model_undetected(root, evidence):
@@ -162,12 +162,12 @@ E             ]
 E           }...
 E         
 E         ...Full output truncated (8 lines hidden), use '-vv' to show or False)
-E        +  where False = any(<generator object test_KDP_AUD_012_canon_files_edited_on_disk_are_fed_to_the_model_undetected.<locals>.<genexpr> at 0x7fa9b30ac040>)
+E        +  where False = any(<generator object test_KDP_AUD_012_canon_files_edited_on_disk_are_fed_to_the_model_undetected.<locals>.<genexpr> at 0x7fe9ad6b8520>)
 
 audit/tests/test_ws_a_governance.py:143: AssertionError
 _ test_KDP_AUD_031_manual_edit_of_ai_chapter_is_counted_as_non_ai_in_release_disclosure _
 
-root = PosixPath('/tmp/pytest-of-root/pytest-46/test_KDP_AUD_031_manual_edit_o0/ws')
+root = PosixPath('/tmp/pytest-of-root/pytest-62/test_KDP_AUD_031_manual_edit_o0/ws')
 evidence = PosixPath('/home/user/kdp-authoring-pipeline/audit/evidence/KDP-AUD-031')
 
     def test_KDP_AUD_031_manual_edit_of_ai_chapter_is_counted_as_non_ai_in_release_disclosure(root, evidence):
@@ -192,7 +192,7 @@ E       assert 0 >= 1
 audit/tests/test_ws_a_governance.py:161: AssertionError
 _______ test_KDP_AUD_044_ai_revision_cannot_be_accepted_in_the_workspace _______
 
-root = PosixPath('/tmp/pytest-of-root/pytest-46/test_KDP_AUD_044_ai_revision_c0/ws')
+root = PosixPath('/tmp/pytest-of-root/pytest-62/test_KDP_AUD_044_ai_revision_c0/ws')
 evidence = PosixPath('/home/user/kdp-authoring-pipeline/audit/evidence/KDP-AUD-044')
 
     def test_KDP_AUD_044_ai_revision_cannot_be_accepted_in_the_workspace(root, evidence):
@@ -214,9 +214,95 @@ E       AssertionError: AI revision cannot be accepted in the browser: ['The cha
 E       assert False
 
 audit/tests/test_ws_a_governance.py:179: AssertionError
+______ test_KDP_AUD_001_unauthenticated_peer_forges_full_release_approval ______
+
+root = PosixPath('/tmp/pytest-of-root/pytest-62/test_KDP_AUD_001_unauthenticat0/ws')
+evidence = PosixPath('/home/user/kdp-authoring-pipeline/audit/evidence/KDP-AUD-001')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fe9ad241df0>
+
+    def test_KDP_AUD_001_unauthenticated_peer_forges_full_release_approval(root, evidence, monkeypatch):
+        """A client with only HTTP reach drives a book from nothing to an approved, frozen release
+        packet, authorising paid generation and every 'human' decision under invented names.
+        With an operator-identity header required (set by an authenticating proxy), a peer that
+        cannot present one must be unable to approve a release. The peer never sends the header."""
+        monkeypatch.setenv("KDP_WORKSPACE_OPERATOR_HEADER", "X-KDP-Operator")
+        result = run_c1(root)
+        (evidence / "c1_transcript.json").write_text(json.dumps(result, indent=2))
+>       assert result["candidate_status"] != "approved_for_manual_kdp_action", (
+            "Unauthenticated peer produced an approved-for-manual-KDP release packet "
+            f"({result['packet_id']}) under self-declared names {result['distinct_actor_names']}")
+E       AssertionError: Unauthenticated peer produced an approved-for-manual-KDP release packet (PKT-20260929-AB8583E6) under self-declared names ['Mallory (forged)', 'fake', 'operator', 'system']
+E       assert 'approved_for_manual_kdp_action' != 'approved_for_manual_kdp_action'
+
+audit/tests/test_ws_b_workspace.py:35: AssertionError
+_____________ test_KDP_AUD_050_post_with_absent_origin_is_accepted _____________
+
+root = PosixPath('/tmp/pytest-of-root/pytest-62/test_KDP_AUD_050_post_with_abs0/ws')
+evidence = PosixPath('/home/user/kdp-authoring-pipeline/audit/evidence/KDP-AUD-050')
+
+    def test_KDP_AUD_050_post_with_absent_origin_is_accepted(root, evidence):
+        """`if origin and origin != ...` accepts a POST that sends no Origin header at all.
+        A hardened server should require a same-origin signal (Origin or Sec-Fetch-Site) for state change."""
+        book = plan_title(root)
+        with Workspace(root) as ws:
+            token = ws.csrf(f"/titles/{book.title_id}")
+            # No Origin header and no Sec-Fetch-Site; a valid CSRF token (which any page reader has).
+            status, _, _ = ws.post(f"/titles/{book.title_id}/actions/scan-scripture",
+                                   {"csrf_token": token, "operator": "peer"}, headers={"Origin": None})
+            (evidence / "absent_origin.json").write_text(json.dumps({"status_without_origin": status}))
+>       assert status == 403, f"POST without an Origin header was accepted (status {status}), not rejected"
+E       AssertionError: POST without an Origin header was accepted (status 303), not rejected
+E       assert 303 == 403
+
+audit/tests/test_ws_b_workspace.py:50: AssertionError
+____________ test_KDP_AUD_017_security_headers_on_redirect_and_405 _____________
+
+root = PosixPath('/tmp/pytest-of-root/pytest-62/test_KDP_AUD_017_security_head0/ws')
+evidence = PosixPath('/home/user/kdp-authoring-pipeline/audit/evidence/KDP-AUD-017')
+
+    def test_KDP_AUD_017_security_headers_on_redirect_and_405(root, evidence):
+        book = plan_title(root)
+        add_fake_priced_profile(root, project_id=book.project_id, monthly=5, per_run=0.5)
+        with Workspace(root) as ws:
+            token = ws.csrf(f"/titles/{book.title_id}")
+            red_status, red_headers, _ = ws.post(f"/titles/{book.title_id}/actions/scan-scripture",
+                                                 {"csrf_token": token, "operator": "op"},
+                                                 headers={"Origin": f"http://{ws.host}"})
+            m_status, m_headers, _ = ws.request("PUT", "/")
+        evidence.joinpath("headers.json").write_text(json.dumps({
+            "redirect_status": red_status, "redirect_headers": red_headers,
+            "method_not_allowed_status": m_status, "mna_headers": m_headers}, indent=2))
+        for label, hdrs in (("303", red_headers), ("405", m_headers)):
+>           assert hdrs.get("Content-Security-Policy"), f"{label} response lacks Content-Security-Policy"
+E           AssertionError: 303 response lacks Content-Security-Policy
+E           assert None
+E            +  where None = <built-in method get of dict object at 0x7fe9a7cdf140>('Content-Security-Policy')
+E            +    where <built-in method get of dict object at 0x7fe9a7cdf140> = {'Server': 'KDPWorkspace ', 'Date': 'Tue, 29 Sep 2026 16:40:10 GMT', 'Location': '/titles/BK-20260929-ED60223F?done=scan-scripture#actions', 'Content-Length': '0', ...}.get
+
+audit/tests/test_ws_b_workspace.py:120: AssertionError
+____________ test_KDP_AUD_053_head_and_get_diverge_for_review_pages ____________
+
+root = PosixPath('/tmp/pytest-of-root/pytest-62/test_KDP_AUD_053_head_and_get_0/ws')
+evidence = PosixPath('/home/user/kdp-authoring-pipeline/audit/evidence/KDP-AUD-053')
+
+    def test_KDP_AUD_053_head_and_get_diverge_for_review_pages(root, evidence):
+        """do_HEAD renders workspace/help/healthz/404 only; for a real review URL it returns 404
+        though GET returns 200. HEAD should mirror GET's status for the same resource."""
+        book = plan_title(root)
+        item = add_verification_flag(root, title_id=book.title_id, kind="source_claim",
+                                     locator="ch1", exact_text="claim", reviewer="author")
+        with Workspace(root) as ws:
+            get_status, _, _ = ws.get(f"/reviews/verification/{item.verification_id}")
+            head_status, _, _ = ws.request("HEAD", f"/reviews/verification/{item.verification_id}")
+        (evidence / "head_get.json").write_text(json.dumps({"get": get_status, "head": head_status}))
+>       assert get_status == head_status, f"GET returns {get_status} but HEAD returns {head_status} for the same page"
+E       AssertionError: GET returns 200 but HEAD returns 404 for the same page
+E       assert 200 == 404
+
+audit/tests/test_ws_b_workspace.py:146: AssertionError
 _______ test_KDP_AUD_009_profile_can_name_any_env_var_and_any_https_host _______
 
-root = PosixPath('/tmp/pytest-of-root/pytest-46/test_KDP_AUD_009_profile_can_n0/ws')
+root = PosixPath('/tmp/pytest-of-root/pytest-62/test_KDP_AUD_009_profile_can_n0/ws')
 evidence = PosixPath('/home/user/kdp-authoring-pipeline/audit/evidence/KDP-AUD-009')
 
     def test_KDP_AUD_009_profile_can_name_any_env_var_and_any_https_host(root, evidence):
@@ -233,14 +319,14 @@ evidence = PosixPath('/home/user/kdp-authoring-pipeline/audit/evidence/KDP-AUD-0
             f"Profile validation accepts an arbitrary credential variable / an unapproved host: {outcomes}"
 E       AssertionError: Profile validation accepts an arbitrary credential variable / an unapproved host: {'foreign_host': 'accepted', 'cloud_secret': 'accepted'}
 E       assert False
-E        +  where False = all(<generator object test_KDP_AUD_009_profile_can_name_any_env_var_and_any_https_host.<locals>.<genexpr> at 0x7fa9b2b642b0>)
+E        +  where False = all(<generator object test_KDP_AUD_009_profile_can_name_any_env_var_and_any_https_host.<locals>.<genexpr> at 0x7fe9ada13d30>)
 
 audit/tests/test_ws_cde_provider_cost_pipeline.py:51: AssertionError
 ________ test_KDP_AUD_009b_non_provider_secret_is_sent_as_bearer_token _________
 
-root = PosixPath('/tmp/pytest-of-root/pytest-46/test_KDP_AUD_009b_non_provider0/ws')
-mock = <lab.mock_provider.MockProviderServer object at 0x7fa9b2c40680>
-monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fa9b2cb2930>
+root = PosixPath('/tmp/pytest-of-root/pytest-62/test_KDP_AUD_009b_non_provider0/ws')
+mock = <lab.mock_provider.MockProviderServer object at 0x7fe9ad31af00>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fe9adb40920>
 evidence = PosixPath('/home/user/kdp-authoring-pipeline/audit/evidence/KDP-AUD-009b')
 
     def test_KDP_AUD_009b_non_provider_secret_is_sent_as_bearer_token(root, mock, monkeypatch, evidence):
@@ -263,9 +349,9 @@ E       assert 'Bearer canary-cloud-secret-not-a-real-credential-0000' not in ['
 audit/tests/test_ws_cde_provider_cost_pipeline.py:68: AssertionError
 _____ test_KDP_AUD_007_provider_reported_cost_overrides_configured_pricing _____
 
-root = PosixPath('/tmp/pytest-of-root/pytest-46/test_KDP_AUD_007_provider_repo0/ws')
-mock = <lab.mock_provider.MockProviderServer object at 0x7fa9b17c53a0>
-monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fa9b17c4c50>
+root = PosixPath('/tmp/pytest-of-root/pytest-62/test_KDP_AUD_007_provider_repo0/ws')
+mock = <lab.mock_provider.MockProviderServer object at 0x7fe9adc0e8a0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fe9adead550>
 evidence = PosixPath('/home/user/kdp-authoring-pipeline/audit/evidence/KDP-AUD-007')
 
     def test_KDP_AUD_007_provider_reported_cost_overrides_configured_pricing(root, mock, monkeypatch, evidence):
@@ -284,9 +370,9 @@ E       assert 0.0 >= 1.125
 audit/tests/test_ws_cde_provider_cost_pipeline.py:103: AssertionError
 _____ test_KDP_AUD_022_billed_call_with_anomalous_usage_loses_usage_record _____
 
-root = PosixPath('/tmp/pytest-of-root/pytest-46/test_KDP_AUD_022_billed_call_w0/ws')
-mock = <lab.mock_provider.MockProviderServer object at 0x7fa9b3f91970>
-monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fa9b21677d0>
+root = PosixPath('/tmp/pytest-of-root/pytest-62/test_KDP_AUD_022_billed_call_w0/ws')
+mock = <lab.mock_provider.MockProviderServer object at 0x7fe9a7267620>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fe9a72b4440>
 evidence = PosixPath('/home/user/kdp-authoring-pipeline/audit/evidence/KDP-AUD-022')
 
     def test_KDP_AUD_022_billed_call_with_anomalous_usage_loses_usage_record(root, mock, monkeypatch, evidence):
@@ -306,15 +392,15 @@ evidence = PosixPath('/home/user/kdp-authoring-pipeline/audit/evidence/KDP-AUD-0
 >       assert usage == len(mock.requests), "Provider returned 200 (billed) but no usage event was recorded"
 E       AssertionError: Provider returned 200 (billed) but no usage event was recorded
 E       assert 0 == 1
-E        +  where 1 = len([{'ts': 1790691500.577618, 'method': 'POST', 'path': '/v1/chat/completions', 'headers': {'Host': '127.0.0.1:41461', 'Accept': '*/*', 'Accept-Encoding': 'gzip, deflate', 'Connection': 'keep-alive', ...}, ...}])
-E        +    where [{'ts': 1790691500.577618, 'method': 'POST', 'path': '/v1/chat/completions', 'headers': {'Host': '127.0.0.1:41461', 'Accept': '*/*', 'Accept-Encoding': 'gzip, deflate', 'Connection': 'keep-alive', ...}, ...}] = <lab.mock_provider.MockProviderServer object at 0x7fa9b3f91970>.requests
+E        +  where 1 = len([{'ts': 1790700025.9253533, 'method': 'POST', 'path': '/v1/chat/completions', 'headers': {'Host': '127.0.0.1:34147', 'Accept': '*/*', 'Accept-Encoding': 'gzip, deflate', 'Connection': 'keep-alive', ...}, ...}])
+E        +    where [{'ts': 1790700025.9253533, 'method': 'POST', 'path': '/v1/chat/completions', 'headers': {'Host': '127.0.0.1:34147', 'Accept': '*/*', 'Accept-Encoding': 'gzip, deflate', 'Connection': 'keep-alive', ...}, ...}] = <lab.mock_provider.MockProviderServer object at 0x7fe9a7267620>.requests
 
 audit/tests/test_ws_cde_provider_cost_pipeline.py:163: AssertionError
 _____________ test_KDP_AUD_013_failed_request_can_never_be_retried _____________
 
-root = PosixPath('/tmp/pytest-of-root/pytest-46/test_KDP_AUD_013_failed_reques0/ws')
-mock = <lab.mock_provider.MockProviderServer object at 0x7fa9b02c7200>
-monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fa9b2f63740>
+root = PosixPath('/tmp/pytest-of-root/pytest-62/test_KDP_AUD_013_failed_reques0/ws')
+mock = <lab.mock_provider.MockProviderServer object at 0x7fe9ad501f70>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fe9ad55e720>
 evidence = PosixPath('/home/user/kdp-authoring-pipeline/audit/evidence/KDP-AUD-013')
 
     def test_KDP_AUD_013_failed_request_can_never_be_retried(root, mock, monkeypatch, evidence):
@@ -330,15 +416,15 @@ evidence = PosixPath('/home/user/kdp-authoring-pipeline/audit/evidence/KDP-AUD-0
             error = str(exc)
         (evidence / "retry.txt").write_text(f"retry error: {error}\n")
 >       assert error is None, f"Operator cannot retry the same chapter after a transport failure: {error}"
-E       AssertionError: Operator cannot retry the same chapter after a transport failure: Generation idempotency key already exists with status failed: JOB-20260929-0FC63646
-E       assert 'Generation idempotency key already exists with status failed: JOB-20260929-0FC63646' is None
+E       AssertionError: Operator cannot retry the same chapter after a transport failure: Generation idempotency key already exists with status failed: JOB-20260929-738E760C
+E       assert 'Generation idempotency key already exists with status failed: JOB-20260929-738E760C' is None
 
 audit/tests/test_ws_cde_provider_cost_pipeline.py:178: AssertionError
 _____ test_KDP_AUD_010_truncated_length_output_becomes_acceptable_chapter ______
 
-root = PosixPath('/tmp/pytest-of-root/pytest-46/test_KDP_AUD_010_truncated_len0/ws')
-mock = <lab.mock_provider.MockProviderServer object at 0x7fa9b21cde80>
-monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fa9b0112840>
+root = PosixPath('/tmp/pytest-of-root/pytest-62/test_KDP_AUD_010_truncated_len0/ws')
+mock = <lab.mock_provider.MockProviderServer object at 0x7fe9ac83ad50>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fe9ac757c50>
 evidence = PosixPath('/home/user/kdp-authoring-pipeline/audit/evidence/KDP-AUD-010')
 
     def test_KDP_AUD_010_truncated_length_output_becomes_acceptable_chapter(root, mock, monkeypatch, evidence):
@@ -354,14 +440,14 @@ evidence = PosixPath('/home/user/kdp-authoring-pipeline/audit/evidence/KDP-AUD-0
         (evidence / "result.json").write_text(json.dumps(outcome, indent=2))
 >       assert "rejected" in outcome, "finish_reason=length (truncated) output was accepted into the manuscript"
 E       AssertionError: finish_reason=length (truncated) output was accepted into the manuscript
-E       assert 'rejected' in {'accepted': 'AST-20260929-EF79EEF1', 'text': '# Chapter One\n\nThe hero stepped into the room and began to'}
+E       assert 'rejected' in {'accepted': 'AST-20260929-26BDDDC9', 'text': '# Chapter One\n\nThe hero stepped into the room and began to'}
 
 audit/tests/test_ws_cde_provider_cost_pipeline.py:194: AssertionError
 _______________ test_KDP_AUD_023_response_body_size_is_unbounded _______________
 
-root = PosixPath('/tmp/pytest-of-root/pytest-46/test_KDP_AUD_023_response_body0/ws')
-mock = <lab.mock_provider.MockProviderServer object at 0x7fa9b3f2a720>
-monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fa9b1f6c440>
+root = PosixPath('/tmp/pytest-of-root/pytest-62/test_KDP_AUD_023_response_body0/ws')
+mock = <lab.mock_provider.MockProviderServer object at 0x7fe9a77fad50>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fe9ac5f6630>
 evidence = PosixPath('/home/user/kdp-authoring-pipeline/audit/evidence/KDP-AUD-023')
 
     def test_KDP_AUD_023_response_body_size_is_unbounded(root, mock, monkeypatch, evidence):
@@ -386,7 +472,7 @@ E       assert 50331648 < 5000000
 audit/tests/test_ws_cde_provider_cost_pipeline.py:212: AssertionError
 _______ test_KDP_AUD_005_developmental_edit_is_sent_without_the_chapter ________
 
-root = PosixPath('/tmp/pytest-of-root/pytest-46/test_KDP_AUD_005_developmental0/ws')
+root = PosixPath('/tmp/pytest-of-root/pytest-62/test_KDP_AUD_005_developmental0/ws')
 evidence = PosixPath('/home/user/kdp-authoring-pipeline/audit/evidence/KDP-AUD-005')
 
     def test_KDP_AUD_005_developmental_edit_is_sent_without_the_chapter(root, evidence):
@@ -404,14 +490,14 @@ evidence = PosixPath('/home/user/kdp-authoring-pipeline/audit/evidence/KDP-AUD-0
 >       assert "UNIQUE-CHAPTER-MARKER-9913" in request.rendered_prompt.rendered_text, \
             "Provenance lists the chapter as an input, but the chapter text was never sent to the model"
 E       AssertionError: Provenance lists the chapter as an input, but the chapter text was never sent to the model
-E       assert 'UNIQUE-CHAPTER-MARKER-9913' in '# Developmental editorial pass\n\nTitle: Audit Book\nTitle ID: BK-20260929-E6512673\nChapter: 1\n\nIdentify developmental findings about structure, pacing, purpose, beats, and resolution. Return findings, not replacement prose.\n'
-E        +  where '# Developmental editorial pass\n\nTitle: Audit Book\nTitle ID: BK-20260929-E6512673\nChapter: 1\n\nIdentify developmental findings about structure, pacing, purpose, beats, and resolution. Return findings, not replacement prose.\n' = RenderedPrompt(template_id='editorial/developmental', template_version='1.0', rendered_text='# Developmental editorial...indings, not replacement prose.\n', rendered_sha256='27469dc63d0074fe3578889e3802a409556ca7490d64c26c2992469758a40c64').rendered_text
-E        +    where RenderedPrompt(template_id='editorial/developmental', template_version='1.0', rendered_text='# Developmental editorial...indings, not replacement prose.\n', rendered_sha256='27469dc63d0074fe3578889e3802a409556ca7490d64c26c2992469758a40c64') = GenerationRequest(task_type='chapter.editorial.developmental.1', system_instructions='Identify developmental issues as...ema_ref=None, metadata={'chapter_number': 1, 'source_asset_id': 'AST-20260929-76F609ED', 'pass_type': 'developmental'}).rendered_prompt
+E       assert 'UNIQUE-CHAPTER-MARKER-9913' in '# Developmental editorial pass\n\nTitle: Audit Book\nTitle ID: BK-20260929-BCA3030A\nChapter: 1\n\nIdentify developmental findings about structure, pacing, purpose, beats, and resolution. Return findings, not replacement prose.\n'
+E        +  where '# Developmental editorial pass\n\nTitle: Audit Book\nTitle ID: BK-20260929-BCA3030A\nChapter: 1\n\nIdentify developmental findings about structure, pacing, purpose, beats, and resolution. Return findings, not replacement prose.\n' = RenderedPrompt(template_id='editorial/developmental', template_version='1.0', rendered_text='# Developmental editorial...indings, not replacement prose.\n', rendered_sha256='a20ee255ee450db52b09c3fec4bef88bca3e5c7103a6c5daeed1976523cd36f7').rendered_text
+E        +    where RenderedPrompt(template_id='editorial/developmental', template_version='1.0', rendered_text='# Developmental editorial...indings, not replacement prose.\n', rendered_sha256='a20ee255ee450db52b09c3fec4bef88bca3e5c7103a6c5daeed1976523cd36f7') = GenerationRequest(task_type='chapter.editorial.developmental.1', system_instructions='Identify developmental issues as...ema_ref=None, metadata={'chapter_number': 1, 'source_asset_id': 'AST-20260929-448F9362', 'pass_type': 'developmental'}).rendered_prompt
 
 audit/tests/test_ws_cde_provider_cost_pipeline.py:229: AssertionError
 _ test_KDP_AUD_006_planning_generations_do_not_receive_concept_or_prior_planning _
 
-root = PosixPath('/tmp/pytest-of-root/pytest-46/test_KDP_AUD_006_planning_gene0/ws')
+root = PosixPath('/tmp/pytest-of-root/pytest-62/test_KDP_AUD_006_planning_gene0/ws')
 evidence = PosixPath('/home/user/kdp-authoring-pipeline/audit/evidence/KDP-AUD-006')
 
     def test_KDP_AUD_006_planning_generations_do_not_receive_concept_or_prior_planning(root, evidence):
@@ -428,14 +514,14 @@ evidence = PosixPath('/home/user/kdp-authoring-pipeline/audit/evidence/KDP-AUD-0
 >       assert "POSITIONING-MARKER-4471" in brief_prompt, \
             "Book brief is generated without the accepted positioning (planning chain is blind)"
 E       AssertionError: Book brief is generated without the accepted positioning (planning chain is blind)
-E       assert 'POSITIONING-MARKER-4471' in '# Book brief\n\nTitle: Book\nTitle ID: BK-20260929-BEAC6F8E\nTarget reader: unspecified\n\nProduce an experimental book brief covering the concept, reader promise, scope, tone, and success criteria. Use only supplied context.\n'
+E       assert 'POSITIONING-MARKER-4471' in '# Book brief\n\nTitle: Book\nTitle ID: BK-20260929-9489AC31\nTarget reader: unspecified\n\nProduce an experimental book brief covering the concept, reader promise, scope, tone, and success criteria. Use only supplied context.\n'
 
 audit/tests/test_ws_cde_provider_cost_pipeline.py:244: AssertionError
 ____ test_KDP_AUD_011_continuity_rejects_a_legitimate_missing_beat_finding _____
 
-root = PosixPath('/tmp/pytest-of-root/pytest-46/test_KDP_AUD_011_continuity_re0/ws')
-mock = <lab.mock_provider.MockProviderServer object at 0x7fa9b378ec00>
-monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fa9b34a8f50>
+root = PosixPath('/tmp/pytest-of-root/pytest-62/test_KDP_AUD_011_continuity_re0/ws')
+mock = <lab.mock_provider.MockProviderServer object at 0x7fe9ae40e3c0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fe9ae12f170>
 evidence = PosixPath('/home/user/kdp-authoring-pipeline/audit/evidence/KDP-AUD-011')
 
     def test_KDP_AUD_011_continuity_rejects_a_legitimate_missing_beat_finding(root, mock, monkeypatch, evidence):
@@ -461,7 +547,7 @@ E         + ContinuityOutputInvalid: continuity output says required context is 
 audit/tests/test_ws_cde_provider_cost_pipeline.py:261: AssertionError
 _____ test_KDP_AUD_029_prompt_file_edit_is_not_detectable_from_provenance ______
 
-root = PosixPath('/tmp/pytest-of-root/pytest-46/test_KDP_AUD_029_prompt_file_e0/ws')
+root = PosixPath('/tmp/pytest-of-root/pytest-62/test_KDP_AUD_029_prompt_file_e0/ws')
 evidence = PosixPath('/home/user/kdp-authoring-pipeline/audit/evidence/KDP-AUD-029')
 
     def test_KDP_AUD_029_prompt_file_edit_is_not_detectable_from_provenance(root, evidence):
@@ -480,12 +566,12 @@ evidence = PosixPath('/home/user/kdp-authoring-pipeline/audit/evidence/KDP-AUD-0
             "Edited prompt v1.0 is recorded as outline v1.0; no template-file hash exists to detect the change"
 E       AssertionError: Edited prompt v1.0 is recorded as outline v1.0; no template-file hash exists to detect the change
 E       assert False
-E        +  where False = any(<generator object test_KDP_AUD_029_prompt_file_edit_is_not_detectable_from_provenance.<locals>.<genexpr> at 0x7fa9b1d26260>)
+E        +  where False = any(<generator object test_KDP_AUD_029_prompt_file_edit_is_not_detectable_from_provenance.<locals>.<genexpr> at 0x7fe9ad82ca00>)
 
 audit/tests/test_ws_cde_provider_cost_pipeline.py:276: AssertionError
 ___ test_KDP_AUD_030_stray_markdown_file_in_prompts_disables_all_generation ____
 
-root = PosixPath('/tmp/pytest-of-root/pytest-46/test_KDP_AUD_030_stray_markdow0/ws')
+root = PosixPath('/tmp/pytest-of-root/pytest-62/test_KDP_AUD_030_stray_markdow0/ws')
 evidence = PosixPath('/home/user/kdp-authoring-pipeline/audit/evidence/KDP-AUD-030')
 
     def test_KDP_AUD_030_stray_markdown_file_in_prompts_disables_all_generation(root, evidence):
@@ -503,7 +589,7 @@ E       assert 'Prompt filename must match {template-id}-v{dotted-version}.md: R
 audit/tests/test_ws_cde_provider_cost_pipeline.py:288: AssertionError
 _______ test_KDP_AUD_014_placeholder_variants_are_not_detected_by_build ________
 
-root = PosixPath('/tmp/pytest-of-root/pytest-46/test_KDP_AUD_014_placeholder_v0/ws')
+root = PosixPath('/tmp/pytest-of-root/pytest-62/test_KDP_AUD_014_placeholder_v0/ws')
 evidence = PosixPath('/home/user/kdp-authoring-pipeline/audit/evidence/KDP-AUD-014')
 
     def test_KDP_AUD_014_placeholder_variants_are_not_detected_by_build(root, evidence):
@@ -528,8 +614,8 @@ E         + built
 audit/tests/test_ws_cde_provider_cost_pipeline.py:302: AssertionError
 ___________ test_KDP_AUD_027_relocated_workspace_breaks_every_asset ____________
 
-root = PosixPath('/tmp/pytest-of-root/pytest-46/test_KDP_AUD_027_relocated_wor0/ws')
-tmp_path = PosixPath('/tmp/pytest-of-root/pytest-46/test_KDP_AUD_027_relocated_wor0')
+root = PosixPath('/tmp/pytest-of-root/pytest-62/test_KDP_AUD_027_relocated_wor0/ws')
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-62/test_KDP_AUD_027_relocated_wor0')
 evidence = PosixPath('/home/user/kdp-authoring-pipeline/audit/evidence/KDP-AUD-027')
 
     def test_KDP_AUD_027_relocated_workspace_breaks_every_asset(root, tmp_path, evidence):
@@ -549,12 +635,12 @@ evidence = PosixPath('/home/user/kdp-authoring-pipeline/audit/evidence/KDP-AUD-0
 >       assert not [c for c in bad if c["check"].startswith("asset:")], \
             f"Backup restored to another path: {len(bad)} FAIL checks (absolute paths in DB); no relocate command exists"
 E       AssertionError: Backup restored to another path: 12 FAIL checks (absolute paths in DB); no relocate command exists
-E       assert not [{'status': 'FAIL', 'check': 'asset:AST-20260929-15F2BB1F', 'message': 'file is missing', 'recommended_action': 'Resto...ed_action': 'Restore the file or remove the stale operational record through an explicit maintenance procedure.'}, ...]
+E       assert not [{'status': 'FAIL', 'check': 'asset:AST-20260929-BA8ED03B', 'message': 'file is missing', 'recommended_action': 'Resto...ed_action': 'Restore the file or remove the stale operational record through an explicit maintenance procedure.'}, ...]
 
 audit/tests/test_ws_fg_durability_build.py:49: AssertionError
 __ test_KDP_AUD_040_doctor_misses_build_manifest_canon_and_approval_tampering __
 
-root = PosixPath('/tmp/pytest-of-root/pytest-46/test_KDP_AUD_040_doctor_misses0/ws')
+root = PosixPath('/tmp/pytest-of-root/pytest-62/test_KDP_AUD_040_doctor_misses0/ws')
 evidence = PosixPath('/home/user/kdp-authoring-pipeline/audit/evidence/KDP-AUD-040')
 
     def test_KDP_AUD_040_doctor_misses_build_manifest_canon_and_approval_tampering(root, evidence):
@@ -576,7 +662,7 @@ E        +  where 0 = len([])
 audit/tests/test_ws_fg_durability_build.py:64: AssertionError
 _________ test_KDP_AUD_032_build_drops_every_line_equal_to_the_heading _________
 
-root = PosixPath('/tmp/pytest-of-root/pytest-46/test_KDP_AUD_032_build_drops_e0/ws')
+root = PosixPath('/tmp/pytest-of-root/pytest-62/test_KDP_AUD_032_build_drops_e0/ws')
 evidence = PosixPath('/home/user/kdp-authoring-pipeline/audit/evidence/KDP-AUD-032')
 
     def test_KDP_AUD_032_build_drops_every_line_equal_to_the_heading(root, evidence):
@@ -590,13 +676,13 @@ evidence = PosixPath('/home/user/kdp-authoring-pipeline/audit/evidence/KDP-AUD-0
 >       assert manuscript.count("# Chapter One") == 2, "Repeated heading line silently removed from chapter body"
 E       AssertionError: Repeated heading line silently removed from chapter body
 E       assert 1 == 2
-E        +  where 1 = <built-in method count of str object at 0x7fa9b33f0920>('# Chapter One')
-E        +    where <built-in method count of str object at 0x7fa9b33f0920> = '# Audit Book\n\n## Contents\n\n- [Chapter One](#chapter-001)\n\n---\n\n<a id="chapter-001"></a>\n\n# Chapter One\n\nIntro.\n\n\nThe refrain above is part of the poem.\n'.count
+E        +  where 1 = <built-in method count of str object at 0x7fe9ac4192e0>('# Chapter One')
+E        +    where <built-in method count of str object at 0x7fe9ac4192e0> = '# Audit Book\n\n## Contents\n\n- [Chapter One](#chapter-001)\n\n---\n\n<a id="chapter-001"></a>\n\n# Chapter One\n\nIntro.\n\n\nThe refrain above is part of the poem.\n'.count
 
 audit/tests/test_ws_fg_durability_build.py:75: AssertionError
 ______ test_KDP_AUD_043_crlf_checkout_changes_hashes_of_identical_content ______
 
-root = PosixPath('/tmp/pytest-of-root/pytest-46/test_KDP_AUD_043_crlf_checkout0/ws')
+root = PosixPath('/tmp/pytest-of-root/pytest-62/test_KDP_AUD_043_crlf_checkout0/ws')
 evidence = PosixPath('/home/user/kdp-authoring-pipeline/audit/evidence/KDP-AUD-043')
 
     def test_KDP_AUD_043_crlf_checkout_changes_hashes_of_identical_content(root, evidence):
@@ -617,7 +703,7 @@ E         + e3f887f549eb4899c7b8fffd1bd48940c093da61c2b1b7635af96fc85d77ccd1
 audit/tests/test_ws_fg_durability_build.py:94: AssertionError
 _ test_KDP_AUD_041_no_schema_version_so_newer_db_is_silently_accepted_by_older_code _
 
-root = PosixPath('/tmp/pytest-of-root/pytest-46/test_KDP_AUD_041_no_schema_ver0/ws')
+root = PosixPath('/tmp/pytest-of-root/pytest-62/test_KDP_AUD_041_no_schema_ver0/ws')
 evidence = PosixPath('/home/user/kdp-authoring-pipeline/audit/evidence/KDP-AUD-041')
 
     def test_KDP_AUD_041_no_schema_version_so_newer_db_is_silently_accepted_by_older_code(root, evidence):
@@ -633,7 +719,7 @@ E       assert (0 or [])
 audit/tests/test_ws_fg_durability_build.py:124: AssertionError
 ____ test_KDP_AUD_042_sqlite_runs_without_foreign_keys_wal_or_busy_timeout _____
 
-root = PosixPath('/tmp/pytest-of-root/pytest-46/test_KDP_AUD_042_sqlite_runs_w0/ws')
+root = PosixPath('/tmp/pytest-of-root/pytest-62/test_KDP_AUD_042_sqlite_runs_w0/ws')
 evidence = PosixPath('/home/user/kdp-authoring-pipeline/audit/evidence/KDP-AUD-042')
 
     def test_KDP_AUD_042_sqlite_runs_without_foreign_keys_wal_or_busy_timeout(root, evidence):
@@ -650,6 +736,10 @@ E       assert 0 == 1
 audit/tests/test_ws_fg_durability_build.py:134: AssertionError
 ==================================== PASSES ====================================
 =========================== short test summary info ============================
+PASSED audit/tests/test_ws_b_workspace.py::test_POS_cross_origin_and_missing_token_are_rejected
+PASSED audit/tests/test_ws_b_workspace.py::test_POS_hostile_names_are_html_inert
+PASSED audit/tests/test_ws_b_workspace.py::test_POS_hostile_model_output_is_escaped_in_review
+PASSED audit/tests/test_ws_b_workspace.py::test_POS_route_id_rejects_traversal_and_bad_verbs
 PASSED audit/tests/test_ws_cde_provider_cost_pipeline.py::test_POS_provider_error_bodies_do_not_leak_key
 PASSED audit/tests/test_ws_cde_provider_cost_pipeline.py::test_POS_offline_provider_check_makes_no_network_call
 PASSED audit/tests/test_ws_cde_provider_cost_pipeline.py::test_POS_K11_budget_check_serialized_by_sqlite_writer_lock
@@ -664,6 +754,10 @@ FAILED audit/tests/test_ws_a_governance.py::test_KDP_AUD_021_audit_log_rewrite_i
 FAILED audit/tests/test_ws_a_governance.py::test_KDP_AUD_012_canon_files_edited_on_disk_are_fed_to_the_model_undetected
 FAILED audit/tests/test_ws_a_governance.py::test_KDP_AUD_031_manual_edit_of_ai_chapter_is_counted_as_non_ai_in_release_disclosure
 FAILED audit/tests/test_ws_a_governance.py::test_KDP_AUD_044_ai_revision_cannot_be_accepted_in_the_workspace
+FAILED audit/tests/test_ws_b_workspace.py::test_KDP_AUD_001_unauthenticated_peer_forges_full_release_approval
+FAILED audit/tests/test_ws_b_workspace.py::test_KDP_AUD_050_post_with_absent_origin_is_accepted
+FAILED audit/tests/test_ws_b_workspace.py::test_KDP_AUD_017_security_headers_on_redirect_and_405
+FAILED audit/tests/test_ws_b_workspace.py::test_KDP_AUD_053_head_and_get_diverge_for_review_pages
 FAILED audit/tests/test_ws_cde_provider_cost_pipeline.py::test_KDP_AUD_009_profile_can_name_any_env_var_and_any_https_host
 FAILED audit/tests/test_ws_cde_provider_cost_pipeline.py::test_KDP_AUD_009b_non_provider_secret_is_sent_as_bearer_token
 FAILED audit/tests/test_ws_cde_provider_cost_pipeline.py::test_KDP_AUD_007_provider_reported_cost_overrides_configured_pricing
@@ -683,4 +777,4 @@ FAILED audit/tests/test_ws_fg_durability_build.py::test_KDP_AUD_032_build_drops_
 FAILED audit/tests/test_ws_fg_durability_build.py::test_KDP_AUD_043_crlf_checkout_changes_hashes_of_identical_content
 FAILED audit/tests/test_ws_fg_durability_build.py::test_KDP_AUD_041_no_schema_version_so_newer_db_is_silently_accepted_by_older_code
 FAILED audit/tests/test_ws_fg_durability_build.py::test_KDP_AUD_042_sqlite_runs_without_foreign_keys_wal_or_busy_timeout
-27 failed, 6 passed in 40.75s
+31 failed, 10 passed in 57.77s

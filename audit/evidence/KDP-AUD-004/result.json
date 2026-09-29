@@ -2,14 +2,14 @@
   "first_build_blockers": [
     {
       "type": "scripture_placeholder",
-      "asset_id": "AST-20260929-96BFE5B0",
+      "asset_id": "AST-20260929-799EE3C9",
       "locator": "chapter-001:line-0003",
       "text": "[SCRIPTURE NEEDED]"
     },
     {
       "type": "approval_condition",
-      "approval_id": "APR-20260929-5F142615",
-      "asset_id": "AST-20260929-96BFE5B0",
+      "approval_id": "APR-20260929-401A0411",
+      "asset_id": "AST-20260929-799EE3C9",
       "condition": "[SCRIPTURE NEEDED] remains unresolved"
     }
   ],

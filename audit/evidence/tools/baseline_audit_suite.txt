@@ -1,1 +1,1 @@
-27 failed, 6 passed in 40.75s
+31 failed, 10 passed in 57.77s

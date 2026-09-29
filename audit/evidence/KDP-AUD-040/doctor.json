@@ -1,7 +1,7 @@
 [
   {
     "status": "WARN",
-    "check": "provider-selection:PRJ-20260929-70A5E68E",
+    "check": "provider-selection:PRJ-20260929-84FD98D3",
     "message": "no provider selected",
     "recommended_action": "Select an enabled provider profile before running generation."
   },
@@ -13,19 +13,19 @@
   },
   {
     "status": "FAIL",
-    "check": "build-manifest:BLD-20260929-339DCD7A",
+    "check": "build-manifest:BLD-20260929-3E757B40",
     "message": "manifest missing or hash mismatch",
     "recommended_action": "Do not release from this build; rebuild from accepted chapters."
   },
   {
     "status": "FAIL",
-    "check": "approval:APR-20260929-322CFE1E",
+    "check": "approval:APR-20260929-FD5B9D06",
     "message": "approved hash does not match the accepted asset",
     "recommended_action": "Treat the acceptance as invalid until a human re-reviews the asset."
   },
   {
     "status": "FAIL",
-    "check": "canon:BK-20260929-51E1C1F8:entities.json",
+    "check": "canon:BK-20260929-F153C0DD:entities.json",
     "message": "canon file changed outside the CanonProposal workflow",
     "recommended_action": "Restore the canon file or record the change through an approved proposal; continuity analysis reads it."
   }

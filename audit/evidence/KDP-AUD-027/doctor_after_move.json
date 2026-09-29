@@ -1,7 +1,7 @@
 [
   {
     "status": "WARN",
-    "check": "provider-selection:PRJ-20260929-791F989C",
+    "check": "provider-selection:PRJ-20260929-9D5980FA",
     "message": "no provider selected",
     "recommended_action": "Select an enabled provider profile before running generation."
   },

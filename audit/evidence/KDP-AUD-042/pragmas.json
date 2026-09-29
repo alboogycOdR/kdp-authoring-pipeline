@@ -1,0 +1,6 @@
+{
+  "foreign_keys": 1,
+  "journal_mode": "delete",
+  "busy_timeout": 15000,
+  "synchronous": 2
+}

@@ -1,0 +1,88 @@
+# `kdp` CLI command tree
+
+Generated from the Typer app at the audited SHA (`91c48ad`). Tags: `[mutates]` writes SQLite/files; `[provider-call]` invokes the selected provider (billable).
+
+- `kdp audit` ENTITY_ID
+- `kdp brief create` TITLE_ID `[mutates]` `[provider-call]`
+- `kdp budget set` PROJECT_ID --monthly-usd --max-run-usd --warning-percent --hard-stop `[mutates]`
+- `kdp budget show` PROJECT_ID
+- `kdp build manuscript` TITLE_ID --builder `[mutates]`
+- `kdp build matter-accept` ASSET_ID --reviewer `[mutates]`
+- `kdp build matter-add` TITLE_ID SECTION SOURCE_FILE --creator `[mutates]`
+- `kdp canon approve` PROPOSAL_ID --reviewer --decision `[mutates]`
+- `kdp canon proposals` TITLE_ID
+- `kdp chapter accept` TITLE_ID CHAPTER_NUMBER --asset-id --reviewer `[mutates]`
+- `kdp chapter advance-drafting` TITLE_ID `[mutates]`
+- `kdp chapter continuity` TITLE_ID CHAPTER_NUMBER --asset-id `[mutates]` `[provider-call]`
+- `kdp chapter draft` TITLE_ID CHAPTER_NUMBER `[mutates]` `[provider-call]`
+- `kdp chapter revise` TITLE_ID CHAPTER_NUMBER --asset-id `[mutates]` `[provider-call]`
+- `kdp chapter-card generate` TITLE_ID --chapter-number `[mutates]` `[provider-call]`
+- `kdp chapters list` TITLE_ID
+- `kdp chapters next` TITLE_ID --draft `[mutates]` `[provider-call]`
+- `kdp chapters queue` TITLE_ID --through --start `[mutates]`
+- `kdp chapters resume` TITLE_ID `[mutates]`
+- `kdp chapters status` TITLE_ID
+- `kdp chapters stop` TITLE_ID `[mutates]`
+- `kdp chapters summary` TITLE_ID --chapter-number --asset-id --summary --reviewer `[mutates]`
+- `kdp concept approve` ASSET_ID --reviewer `[mutates]`
+- `kdp concept audience-brief` TITLE_ID --audience `[mutates]` `[provider-call]`
+- `kdp concept disable` TITLE_ID `[mutates]`
+- `kdp concept drafting-brief` TITLE_ID --asset-id `[mutates]` `[provider-call]`
+- `kdp concept enable` TITLE_ID `[mutates]`
+- `kdp concept enrich` TITLE_ID --asset-id --selection `[mutates]` `[provider-call]`
+- `kdp concept generate-seeds` TITLE_ID --asset-id `[mutates]` `[provider-call]`
+- `kdp concept score` TITLE_ID --asset-id `[mutates]` `[provider-call]`
+- `kdp concept validate` ASSET_ID `[mutates]`
+- `kdp doctor` 
+- `kdp editorial recommend` TITLE_ID CHAPTER_NUMBER --asset-id --finding-ids --owner `[mutates]`
+- `kdp editorial run` TITLE_ID CHAPTER_NUMBER --asset-id --pass-name `[mutates]` `[provider-call]`
+- `kdp init-db`  `[mutates]`
+- `kdp init-project` NAME --language `[mutates]`
+- `kdp inspect assets` TITLE_ID
+- `kdp inspect budget` TITLE_ID
+- `kdp inspect builds` TITLE_ID
+- `kdp inspect concept` TITLE_ID
+- `kdp inspect editorial` TITLE_ID
+- `kdp inspect jobs` TITLE_ID
+- `kdp inspect lifecycle` TITLE_ID
+- `kdp inspect provenance` TITLE_ID
+- `kdp inspect provider` TITLE_ID
+- `kdp inspect release` TITLE_ID
+- `kdp inspect title` TITLE_ID
+- `kdp inspect usage` TITLE_ID
+- `kdp inspect verification` TITLE_ID
+- `kdp jobs` TITLE_ID
+- `kdp new-title` PROJECT_ID WORKING_TITLE --language `[mutates]`
+- `kdp outline generate` TITLE_ID `[mutates]` `[provider-call]`
+- `kdp planning accept` ASSET_ID --reviewer --chapter-number `[mutates]`
+- `kdp planning advance-planned` TITLE_ID `[mutates]`
+- `kdp planning advance-validated` TITLE_ID `[mutates]`
+- `kdp positioning create` TITLE_ID `[mutates]` `[provider-call]`
+- `kdp pricing list` --provider-id
+- `kdp pricing set` PROVIDER_ID MODEL --input-usd-per-million --output-usd-per-million --cached-input-usd-per-million --currency `[mutates]`
+- `kdp providers add-fake` PROVIDER_ID DISPLAY_NAME --model `[mutates]`
+- `kdp providers add-openai-compatible` PROVIDER_ID DISPLAY_NAME MODEL --base-url --api-key-env --max-output-tokens --temperature --reasoning-effort --connect-timeout-seconds --read-timeout-seconds --write-timeout-seconds --pool-timeout-seconds --priority `[mutates]`
+- `kdp providers check` PROVIDER_ID --connect `[mutates]` `[network if --connect]`
+- `kdp providers disable` PROVIDER_ID `[mutates]`
+- `kdp providers enable` PROVIDER_ID `[mutates]`
+- `kdp providers list` 
+- `kdp providers select` PROVIDER_ID --project-id `[mutates]`
+- `kdp providers set-timeouts` PROVIDER_ID --connect-timeout-seconds --read-timeout-seconds --write-timeout-seconds --pool-timeout-seconds `[mutates]`
+- `kdp providers show` PROVIDER_ID
+- `kdp release candidate` TITLE_ID BUILD_ID --creator `[mutates]`
+- `kdp release check` CANDIDATE_ID DOMAIN KEY DECISION --reviewer --rationale --evidence-reference --value --statement `[mutates]`
+- `kdp release packet` CANDIDATE_ID --creator `[mutates]`
+- `kdp release review` CANDIDATE_ID DECISION --reviewer --rationale `[mutates]`
+- `kdp rights add` TITLE_ID MATERIAL_TYPE DESCRIPTION --reviewer --asset-id --source --provenance-reference --legal-basis --evidence-reference --territories --term --restrictions `[mutates]`
+- `kdp rights decide` RIGHTS_RECORD_ID DECISION --reviewer --rationale `[mutates]`
+- `kdp status` TITLE_ID
+- `kdp transition` TITLE_ID TARGET `[mutates]`
+- `kdp verify add-flag` TITLE_ID KIND LOCATOR EXACT_TEXT --reviewer --asset-id `[mutates]`
+- `kdp verify decide` VERIFICATION_ID DECISION --reviewer --rationale --evidence-reference --reference --source-policy `[mutates]`
+- `kdp verify scan-scripture` TITLE_ID `[mutates]`
+- `kdp workspace dashboard` --output `[mutates]`
+- `kdp workspace serve` --port
+
+**80 commands, 55 mutating.**
+
+Observations: `transition` accepts any legal state-machine edge (actor hard-coded `cli-user`, no preflight/release gate); CLI acceptance commands take `--reviewer` as free text; no command prompts for confirmation; generation commands have no cost-acknowledgement gate (the Workspace's `confirm_cost` has no CLI equivalent); there is no `backup`, `restore`, `relocate`, `verify-audit`, `migrate`, `supersede-chapter`, `canon apply` or `export epub/docx` command; `--json` output is implicit (most commands print JSON) but not uniform.

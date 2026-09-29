@@ -1,0 +1,244 @@
+Run started:2026-09-29 13:41:11.219631+00:00
+
+Test results:
+>> Issue: [B105:hardcoded_password_string] Possible hardcoded password: 'developmental'
+   Severity: Low   Confidence: Medium
+   CWE: CWE-259 (https://cwe.mitre.org/data/definitions/259.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b105_hardcoded_password_string.html
+   Location: src/kdp_pipeline/cli/app.py:643:24
+642	    try:
+643	        if pass_name == "developmental":
+644	            result = _run_chapter(_root(root), title_id, chapter_number, "editorial", asset_id=asset_id)
+
+--------------------------------------------------
+>> Issue: [B105:hardcoded_password_string] Possible hardcoded password: 'continuity'
+   Severity: Low   Confidence: Medium
+   CWE: CWE-259 (https://cwe.mitre.org/data/definitions/259.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b105_hardcoded_password_string.html
+   Location: src/kdp_pipeline/continuity/service.py:213:108
+212	            existing_finding = session.scalar(select(EditorialFindingRow).where(
+213	                EditorialFindingRow.asset_id == generation.asset.asset_id, EditorialFindingRow.pass_type == "continuity"))
+214	            if existing_finding is not None:
+
+--------------------------------------------------
+>> Issue: [B106:hardcoded_password_funcarg] Possible hardcoded password: 'continuity'
+   Severity: Low   Confidence: Medium
+   CWE: CWE-259 (https://cwe.mitre.org/data/definitions/259.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b106_hardcoded_password_funcarg.html
+   Location: src/kdp_pipeline/continuity/service.py:221:22
+220	                finding_id=new_id("FND"), title_id=title_id, asset_id=generation.asset.asset_id,
+221	                pass_type="continuity", severity="review", location=f"chapter-{chapter_number:03d}",
+222	                description=generation.generation_result.text, evidence=generation.generation_result.text,
+223	                recommended_action="Review the structured continuity findings before deciding on canon changes.",
+224	                status="open", created_at=utcnow())
+225	            proposal = CanonProposalRow(
+226	                proposal_id=new_id("CAN"), title_id=title_id, finding_id=finding.finding_id,
+227	                entity_id=f"chapter-{chapter_number:03d}", field="continuity_review",
+
+--------------------------------------------------
+>> Issue: [B105:hardcoded_password_string] Possible hardcoded password: 'developmental'
+   Severity: Low   Confidence: Medium
+   CWE: CWE-259 (https://cwe.mitre.org/data/definitions/259.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b105_hardcoded_password_string.html
+   Location: src/kdp_pipeline/editorial/service.py:199:120
+198	            temperature=0 if provider is not None else None, asset_type="analysis.editorial.developmental",
+199	            source_ref=source_asset_id, metadata={"chapter_number": chapter_number, "source_asset_id": source_asset_id, "pass_type": "developmental"},
+200	        )
+
+--------------------------------------------------
+>> Issue: [B105:hardcoded_password_string] Possible hardcoded password: 'developmental'
+   Severity: Low   Confidence: Medium
+   CWE: CWE-259 (https://cwe.mitre.org/data/definitions/259.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b105_hardcoded_password_string.html
+   Location: src/kdp_pipeline/editorial/service.py:204:49
+203	                EditorialFindingRow.asset_id == generation.asset.asset_id,
+204	                EditorialFindingRow.pass_type == "developmental",
+205	            ))
+
+--------------------------------------------------
+>> Issue: [B106:hardcoded_password_funcarg] Possible hardcoded password: 'developmental'
+   Severity: Low   Confidence: Medium
+   CWE: CWE-259 (https://cwe.mitre.org/data/definitions/259.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b106_hardcoded_password_funcarg.html
+   Location: src/kdp_pipeline/editorial/service.py:216:22
+215	                finding_id=new_id("FND"), title_id=title_id, asset_id=generation.asset.asset_id,
+216	                pass_type="developmental", severity="review", location=f"chapter-{chapter_number:03d}",
+217	                description=generation.generation_result.text, evidence=generation.generation_result.text,
+218	                recommended_action="Review the developmental findings before deciding on a revision.",
+219	                status="open", created_at=utcnow(),
+220	            )
+221	            finding.snapshot_path = str(root / "projects" / title.project_id / "titles" / title_id / "07_editorial" / "findings" / f"{finding.finding_id}.json")
+222	            session.add(finding)
+223	            AuditEventWriter.append(session, actor_id="system", action="editorial.finding.created", entity_type="finding", entity_id=finding.finding_id,
+
+--------------------------------------------------
+>> Issue: [B105:hardcoded_password_string] Possible hardcoded password: 'developmental'
+   Severity: Low   Confidence: Medium
+   CWE: CWE-259 (https://cwe.mitre.org/data/definitions/259.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b105_hardcoded_password_string.html
+   Location: src/kdp_pipeline/editorial/service.py:224:102
+223	            AuditEventWriter.append(session, actor_id="system", action="editorial.finding.created", entity_type="finding", entity_id=finding.finding_id,
+224	                                    correlation_id=generation.job.job_id, result="success", metadata={"pass_type": "developmental", "analysis_asset_id": generation.asset.asset_id, "source_asset_id": source_asset_id})
+225	            session.commit()
+
+--------------------------------------------------
+>> Issue: [B105:hardcoded_password_string] Possible hardcoded password: 'continuity'
+   Severity: Low   Confidence: Medium
+   CWE: CWE-259 (https://cwe.mitre.org/data/definitions/259.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b105_hardcoded_password_string.html
+   Location: src/kdp_pipeline/inspection/service.py:312:169
+311	                "status": "valid" if valid and required_context else "invalid_or_unverified",
+312	                "findings_from_invalid_analysis": ([row.finding_id for row in findings if row.asset_id == (analysis.asset_id if analysis else None) and row.pass_type == "continuity"] if invalid else []),
+313	                "proposals_from_invalid_analysis": ([row.proposal_id for row in proposals if row.finding_id and any(f.finding_id == row.finding_id and f.asset_id == (analysis.asset_id if analysis else None) for f in findings)] if invalid else [])})
+
+--------------------------------------------------
+>> Issue: [B105:hardcoded_password_string] Possible hardcoded password: 'continuity'
+   Severity: Low   Confidence: Medium
+   CWE: CWE-259 (https://cwe.mitre.org/data/definitions/259.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b105_hardcoded_password_string.html
+   Location: src/kdp_pipeline/inspection/service.py:465:166
+464	            "continuity": {"runs": continuity_runs, "warnings": continuity_warnings,
+465	                           "findings_from_invalid_analysis": [row.finding_id for row in findings if row.asset_id in invalid_continuity_asset_ids and row.pass_type == "continuity"],
+466	                           "proposals_from_invalid_analysis": [row.proposal_id for row in proposals if row.finding_id and any(f.finding_id == row.finding_id and f.asset_id in invalid_continuity_asset_ids for f in findings)]},
+
+--------------------------------------------------
+>> Issue: [B608:hardcoded_sql_expressions] Possible SQL injection vector through string-based query construction.
+   Severity: Medium   Confidence: Low
+   CWE: CWE-89 (https://cwe.mitre.org/data/definitions/89.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b608_hardcoded_sql_expressions.html
+   Location: src/kdp_pipeline/workspace/render.py:228:8
+227	    return (
+228	        '<section class="start-book" id="start"><h2>Start a new book</h2>'
+229	        '<p>Save your idea, create a project and title, and set a hard spending limit. '
+230	        'Creating the book makes no AI request; generation is a separate, confirmed step.</p>'
+231	        '<form method="post" action="/books">'
+232	        f'<input type="hidden" name="csrf_token" value="{_e(token)}">'
+233	        '<label>Your name<input name="operator" required maxlength="100"></label>'
+234	        '<label>Project name<input name="project_name" required maxlength="200" placeholder="A book or series workspace"></label>'
+235	        '<label>Working book title<input name="title_name" required maxlength="200"></label>'
+236	        '<label>Who is the book for?<textarea name="audience" required maxlength="1000" rows="2" placeholder="Reader age or stage, interests, and need"></textarea></label>'
+237	        '<label>Your book idea<textarea name="idea" required maxlength="4000" rows="4" placeholder="What is the book about? What will the reader experience or gain?"></textarea></label>'
+238	        f'<label>AI provider<select name="provider_id" required>{options}</select></label>'
+239	        '<label>Monthly AI spending limit (USD)<input name="monthly_usd" type="number" min="0.01" max="10000" step="0.01" required></label>'
+240	        '<label>Maximum estimated cost per AI request (USD)<input name="max_run_usd" type="number" min="0.01" max="10000" step="0.01" required></label>'
+241	        '<p class="muted">The limits are hard stops for future requests. Provider billing may differ from local estimates.</p>'
+242	        '<button type="submit">Create book and save idea</button></form></section>'
+243	    )
+
+--------------------------------------------------
+>> Issue: [B107:hardcoded_password_default] Possible hardcoded password: ''
+   Severity: Low   Confidence: Medium
+   CWE: CWE-259 (https://cwe.mitre.org/data/definitions/259.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b107_hardcoded_password_default.html
+   Location: src/kdp_pipeline/workspace/render.py:272:0
+271	
+272	def _workspace_content(snapshot: dict, project_id: str | None = None, query: str = "",
+273	                       token: str = "") -> str:
+274	    selected_project = next((p for p in snapshot["projects"] if p["project_id"] == project_id), None)
+275	    if project_id and selected_project is None:
+276	        return _empty_workspace(f"Project {project_id} was not found.")
+277	    queues, events = _attention(snapshot, project_id, query)
+278	    attention = ''.join(_queue_section(name, queues[name], empty) for name, empty in (
+279	        ("Needs Review", "No open editorial findings."),
+280	        ("Needs Approval", "No assets or proposals are waiting for acceptance."),
+281	        ("Needs Verification", "No pending verification or rights items."),
+282	        ("Blocked", "No builds or release candidates are blocked."),
+283	        ("Ready", "No titles currently meet the ready-for-next-step conditions."),
+284	    ))
+285	    if selected_project:
+286	        budget = snapshot["budgets"].get(project_id, {})
+287	        provider = selected_project.get("provider")
+288	        provider_summary = (f"{provider['display_name']} · {provider['model']} · "
+289	                            f"{'configuration ready · not connected' if provider['ready'] else 'check settings'}"
+290	                            if provider else "No provider selected")
+291	        usage_summary = (f"Known USD cost ${budget.get('spent_usd', 0):.4f} · "
+292	                         f"{budget.get('unknown_cost_events', 0)} unknown-cost events")
+293	        project_header = (
+294	            '<section class="project-focus"><p class="breadcrumb"><a href="/">Workspace</a> / Project</p>'
+295	            f'<h1>{_e(selected_project["name"])}</h1><p>{_e(project_id)} · {_e(selected_project["status"])}</p>'
+296	            f'<p>Provider: {_e(provider_summary)}</p><p>Budget: {_e(usage_summary)}</p>'
+297	            f'<p class="muted">{_e(budget.get("warning") or "No budget warning reported.")}</p></section>'
+298	        )
+299	        projects_html = ''
+300	        title_ids = selected_project["title_ids"]
+301	        titles = ''.join(_title_link(tid, snapshot["titles"][tid]) for tid in title_ids if tid in snapshot["titles"])
+302	        titles_html = '<section class="directory"><h2>Titles</h2>' + (
+303	            f'<ul class="title-list">{titles}</ul>' if titles else '<p class="empty-note">No titles in this project.</p>') + '</section>'
+304	    else:
+305	        project_header = '<section class="welcome"><h1>Workspace</h1><p>Work that needs attention is listed first. Status summaries never approve or publish.</p></section>'
+306	        matching_projects = snapshot["projects"]
+307	        matching_titles = snapshot["titles"].items()
+308	        if query:
+309	            q = query.casefold()
+310	            matching_projects = [p for p in matching_projects if q in p["name"].casefold() or q in p["project_id"].casefold()]
+311	            matched_project_titles = {tid for p in matching_projects for tid in p["title_ids"]}
+312	            matching_titles = [(tid, r) for tid, r in matching_titles
+313	                               if tid in matched_project_titles or q in r["title"]["working_title"].casefold() or q in tid.casefold()]
+314	        projects_html = '<section class="directory"><h2>Projects</h2>' + (
+315	            '<ul class="project-list">' + ''.join(_project_link(p) for p in matching_projects)
+316	            + '</ul>' if matching_projects else '<p class="empty-note">No matching projects.</p>') + '</section>'
+317	        title_rows = ''.join(_title_link(tid, report) for tid, report in matching_titles)
+318	        titles_html = '<section class="directory"><h2>Titles</h2>' + (
+319	            f'<ul class="title-list">{title_rows}</ul>' if title_rows else '<p class="empty-note">No matching titles.</p>') + '</section>'
+320	    activity_html = '<section class="recent-activity"><h2>Recent Activity</h2>' + _activity(events) + '</section>'
+321	    entry = _project_forms(snapshot, project_id, token) if project_id else _start_form(snapshot, token)
+322	    return project_header + entry + '<section class="attention"><h2 class="section-title">Attention</h2>' + attention + '</section>' + activity_html + projects_html + titles_html
+323	
+
+--------------------------------------------------
+>> Issue: [B105:hardcoded_password_string] Possible hardcoded password: 'revision recommendation'
+   Severity: Low   Confidence: Medium
+   CWE: CWE-259 (https://cwe.mitre.org/data/definitions/259.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b105_hardcoded_password_string.html
+   Location: src/kdp_pipeline/workspace/review.py:134:24
+133	                    findings.append({"id": recommendation["recommendation_id"],
+134	                        "pass": "revision recommendation", "severity": "review",
+135	                        "location": f"chapter-{recommendation['chapter_number']:03d}",
+136	                        "description": recommendation["recommendation"],
+137	                        "status": recommendation["status"]})
+138	            if row.asset_type == "concept.brief":
+139	                artefact["scorecards"] = [score for score in report.get("concept", {}).get("scorecards", [])
+
+--------------------------------------------------
+>> Issue: [B105:hardcoded_password_string] Possible hardcoded password: 'concept validation'
+   Severity: Low   Confidence: Medium
+   CWE: CWE-259 (https://cwe.mitre.org/data/definitions/259.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b105_hardcoded_password_string.html
+   Location: src/kdp_pipeline/workspace/review.py:141:67
+140	                                          if score.get("asset_id") == row.asset_id]
+141	                findings.extend({"id": f"concept-warning-{index}", "pass": "concept validation",
+142	                    "severity": "review", "location": "concept brief", "description": warning,
+143	                    "status": "open"} for index, warning in enumerate(
+144	                        report.get("concept", {}).get("validation_warnings", []), start=1))
+
+--------------------------------------------------
+>> Issue: [B105:hardcoded_password_string] Possible hardcoded password: 'continuity inspection'
+   Severity: Low   Confidence: Medium
+   CWE: CWE-259 (https://cwe.mitre.org/data/definitions/259.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b105_hardcoded_password_string.html
+   Location: src/kdp_pipeline/workspace/review.py:146:70
+145	            if row.asset_type.startswith("chapter."):
+146	                findings.extend({"id": f"continuity-warning-{index}", "pass": "continuity inspection",
+147	                    "severity": "review", "location": "title", "description": warning,
+148	                    "status": "open"} for index, warning in enumerate(
+149	                        report.get("continuity", {}).get("warnings", []), start=1))
+
+--------------------------------------------------
+
+Code scanned:
+	Total lines of code: 8825
+	Total lines skipped (#nosec): 0
+	Total potential issues skipped due to specifically being disabled (e.g., #nosec BXXX): 0
+
+Run metrics:
+	Total issues (by severity):
+		Undefined: 0
+		Low: 13
+		Medium: 1
+		High: 0
+	Total issues (by confidence):
+		Undefined: 0
+		Low: 1
+		Medium: 13
+		High: 0
+Files skipped (0):

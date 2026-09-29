@@ -1,0 +1,19 @@
+{
+  "monthly_limit": 0.015719999999999998,
+  "results": [
+    "OperationalError: (sqlite3.OperationalError) database is locked\n[SQL: INSERT INTO jobs (job_id, ti",
+    "OperationalError: (sqlite3.OperationalError) database is locked\n[SQL: INSERT INTO jobs (job_id, ti",
+    "OperationalError: (sqlite3.OperationalError) database is locked\n[SQL: INSERT INTO jobs (job_id, ti",
+    "OperationalError: (sqlite3.OperationalError) database is locked\n[SQL: INSERT INTO jobs (job_id, ti",
+    "OperationalError: (sqlite3.OperationalError) database is locked\n[SQL: INSERT INTO jobs (job_id, ti",
+    "OperationalError: (sqlite3.OperationalError) database is locked\n[SQL: INSERT INTO jobs (job_id, ti",
+    "OperationalError: (sqlite3.OperationalError) database is locked\n[SQL: INSERT INTO jobs (job_id, ti",
+    "OperationalError: (sqlite3.OperationalError) database is locked\n[SQL: INSERT INTO jobs (job_id, ti",
+    "OperationalError: (sqlite3.OperationalError) database is locked\n[SQL: INSERT INTO jobs (job_id, ti",
+    "OperationalError: (sqlite3.OperationalError) database is locked\n[SQL: INSERT INTO jobs (job_id, ti",
+    "OperationalError: (sqlite3.OperationalError) database is locked\n[SQL: INSERT INTO jobs (job_id, ti",
+    "ok"
+  ],
+  "provider_calls": 1,
+  "reserved_total": 0.0102325
+}

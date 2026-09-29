@@ -1,0 +1,278 @@
+* Creating isolated environment: venv+pip...
+* Installing packages in isolated environment:
+  - setuptools>=69
+  - wheel
+* Getting build dependencies for wheel...
+running egg_info
+writing src/kdp_pipeline.egg-info/PKG-INFO
+writing dependency_links to src/kdp_pipeline.egg-info/dependency_links.txt
+writing entry points to src/kdp_pipeline.egg-info/entry_points.txt
+writing requirements to src/kdp_pipeline.egg-info/requires.txt
+writing top-level names to src/kdp_pipeline.egg-info/top_level.txt
+reading manifest file 'src/kdp_pipeline.egg-info/SOURCES.txt'
+writing manifest file 'src/kdp_pipeline.egg-info/SOURCES.txt'
+* Installed build dependency versions:
+  - setuptools==84.0.0
+  - wheel==0.48.0
+* Building wheel...
+running bdist_wheel
+running build
+running build_py
+creating build/lib/kdp_pipeline
+copying src/kdp_pipeline/__init__.py -> build/lib/kdp_pipeline
+creating build/lib/kdp_pipeline/generation
+copying src/kdp_pipeline/generation/service.py -> build/lib/kdp_pipeline/generation
+copying src/kdp_pipeline/generation/__init__.py -> build/lib/kdp_pipeline/generation
+creating build/lib/kdp_pipeline/chapter
+copying src/kdp_pipeline/chapter/service.py -> build/lib/kdp_pipeline/chapter
+copying src/kdp_pipeline/chapter/__init__.py -> build/lib/kdp_pipeline/chapter
+creating build/lib/kdp_pipeline/verification
+copying src/kdp_pipeline/verification/service.py -> build/lib/kdp_pipeline/verification
+copying src/kdp_pipeline/verification/__init__.py -> build/lib/kdp_pipeline/verification
+creating build/lib/kdp_pipeline/planning
+copying src/kdp_pipeline/planning/service.py -> build/lib/kdp_pipeline/planning
+copying src/kdp_pipeline/planning/__init__.py -> build/lib/kdp_pipeline/planning
+copying src/kdp_pipeline/planning/acceptance.py -> build/lib/kdp_pipeline/planning
+creating build/lib/kdp_pipeline/providers
+copying src/kdp_pipeline/providers/costs.py -> build/lib/kdp_pipeline/providers
+copying src/kdp_pipeline/providers/configuration.py -> build/lib/kdp_pipeline/providers
+copying src/kdp_pipeline/providers/base.py -> build/lib/kdp_pipeline/providers
+copying src/kdp_pipeline/providers/__init__.py -> build/lib/kdp_pipeline/providers
+copying src/kdp_pipeline/providers/contracts.py -> build/lib/kdp_pipeline/providers
+copying src/kdp_pipeline/providers/settings.py -> build/lib/kdp_pipeline/providers
+copying src/kdp_pipeline/providers/openai_compatible.py -> build/lib/kdp_pipeline/providers
+copying src/kdp_pipeline/providers/fake.py -> build/lib/kdp_pipeline/providers
+creating build/lib/kdp_pipeline/editorial
+copying src/kdp_pipeline/editorial/service.py -> build/lib/kdp_pipeline/editorial
+copying src/kdp_pipeline/editorial/__init__.py -> build/lib/kdp_pipeline/editorial
+creating build/lib/kdp_pipeline/inspection
+copying src/kdp_pipeline/inspection/service.py -> build/lib/kdp_pipeline/inspection
+copying src/kdp_pipeline/inspection/__init__.py -> build/lib/kdp_pipeline/inspection
+creating build/lib/kdp_pipeline/continuity
+copying src/kdp_pipeline/continuity/service.py -> build/lib/kdp_pipeline/continuity
+copying src/kdp_pipeline/continuity/__init__.py -> build/lib/kdp_pipeline/continuity
+creating build/lib/kdp_pipeline/workspace
+copying src/kdp_pipeline/workspace/render.py -> build/lib/kdp_pipeline/workspace
+copying src/kdp_pipeline/workspace/authoring.py -> build/lib/kdp_pipeline/workspace
+copying src/kdp_pipeline/workspace/review.py -> build/lib/kdp_pipeline/workspace
+copying src/kdp_pipeline/workspace/__init__.py -> build/lib/kdp_pipeline/workspace
+copying src/kdp_pipeline/workspace/actions.py -> build/lib/kdp_pipeline/workspace
+copying src/kdp_pipeline/workspace/inspection.py -> build/lib/kdp_pipeline/workspace
+copying src/kdp_pipeline/workspace/dashboard.py -> build/lib/kdp_pipeline/workspace
+copying src/kdp_pipeline/workspace/server.py -> build/lib/kdp_pipeline/workspace
+creating build/lib/kdp_pipeline/release
+copying src/kdp_pipeline/release/service.py -> build/lib/kdp_pipeline/release
+copying src/kdp_pipeline/release/__init__.py -> build/lib/kdp_pipeline/release
+creating build/lib/kdp_pipeline/models
+copying src/kdp_pipeline/models/canon.py -> build/lib/kdp_pipeline/models
+copying src/kdp_pipeline/models/editorial.py -> build/lib/kdp_pipeline/models
+copying src/kdp_pipeline/models/__init__.py -> build/lib/kdp_pipeline/models
+copying src/kdp_pipeline/models/schemas.py -> build/lib/kdp_pipeline/models
+copying src/kdp_pipeline/models/chapter.py -> build/lib/kdp_pipeline/models
+copying src/kdp_pipeline/models/planning.py -> build/lib/kdp_pipeline/models
+creating build/lib/kdp_pipeline/storage
+copying src/kdp_pipeline/storage/service.py -> build/lib/kdp_pipeline/storage
+copying src/kdp_pipeline/storage/__init__.py -> build/lib/kdp_pipeline/storage
+copying src/kdp_pipeline/storage/files.py -> build/lib/kdp_pipeline/storage
+copying src/kdp_pipeline/storage/audit.py -> build/lib/kdp_pipeline/storage
+copying src/kdp_pipeline/storage/db.py -> build/lib/kdp_pipeline/storage
+copying src/kdp_pipeline/storage/approval_conditions.py -> build/lib/kdp_pipeline/storage
+creating build/lib/kdp_pipeline/cli
+copying src/kdp_pipeline/cli/__init__.py -> build/lib/kdp_pipeline/cli
+copying src/kdp_pipeline/cli/app.py -> build/lib/kdp_pipeline/cli
+creating build/lib/kdp_pipeline/prompts
+copying src/kdp_pipeline/prompts/__init__.py -> build/lib/kdp_pipeline/prompts
+copying src/kdp_pipeline/prompts/registry.py -> build/lib/kdp_pipeline/prompts
+creating build/lib/kdp_pipeline/build
+copying src/kdp_pipeline/build/service.py -> build/lib/kdp_pipeline/build
+copying src/kdp_pipeline/build/__init__.py -> build/lib/kdp_pipeline/build
+creating build/lib/kdp_pipeline/chapters
+copying src/kdp_pipeline/chapters/service.py -> build/lib/kdp_pipeline/chapters
+copying src/kdp_pipeline/chapters/__init__.py -> build/lib/kdp_pipeline/chapters
+creating build/lib/kdp_pipeline/core
+copying src/kdp_pipeline/core/ids.py -> build/lib/kdp_pipeline/core
+copying src/kdp_pipeline/core/__init__.py -> build/lib/kdp_pipeline/core
+copying src/kdp_pipeline/core/hashing.py -> build/lib/kdp_pipeline/core
+copying src/kdp_pipeline/core/state_machine.py -> build/lib/kdp_pipeline/core
+creating build/lib/kdp_pipeline/context
+copying src/kdp_pipeline/context/__init__.py -> build/lib/kdp_pipeline/context
+copying src/kdp_pipeline/context/manifest.py -> build/lib/kdp_pipeline/context
+creating build/lib/kdp_pipeline/concept
+copying src/kdp_pipeline/concept/service.py -> build/lib/kdp_pipeline/concept
+copying src/kdp_pipeline/concept/__init__.py -> build/lib/kdp_pipeline/concept
+running egg_info
+writing src/kdp_pipeline.egg-info/PKG-INFO
+writing dependency_links to src/kdp_pipeline.egg-info/dependency_links.txt
+writing entry points to src/kdp_pipeline.egg-info/entry_points.txt
+writing requirements to src/kdp_pipeline.egg-info/requires.txt
+writing top-level names to src/kdp_pipeline.egg-info/top_level.txt
+reading manifest file 'src/kdp_pipeline.egg-info/SOURCES.txt'
+writing manifest file 'src/kdp_pipeline.egg-info/SOURCES.txt'
+creating build/lib/kdp_pipeline/workspace/static
+copying src/kdp_pipeline/workspace/static/workspace.css -> build/lib/kdp_pipeline/workspace/static
+copying src/kdp_pipeline/workspace/static/workspace.js -> build/lib/kdp_pipeline/workspace/static
+installing to build/bdist.linux-x86_64/wheel
+running install
+running install_lib
+creating build/bdist.linux-x86_64/wheel
+creating build/bdist.linux-x86_64/wheel/kdp_pipeline
+creating build/bdist.linux-x86_64/wheel/kdp_pipeline/generation
+copying build/lib/kdp_pipeline/generation/service.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/generation
+copying build/lib/kdp_pipeline/generation/__init__.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/generation
+creating build/bdist.linux-x86_64/wheel/kdp_pipeline/chapter
+copying build/lib/kdp_pipeline/chapter/service.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/chapter
+copying build/lib/kdp_pipeline/chapter/__init__.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/chapter
+creating build/bdist.linux-x86_64/wheel/kdp_pipeline/verification
+copying build/lib/kdp_pipeline/verification/service.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/verification
+copying build/lib/kdp_pipeline/verification/__init__.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/verification
+creating build/bdist.linux-x86_64/wheel/kdp_pipeline/planning
+copying build/lib/kdp_pipeline/planning/service.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/planning
+copying build/lib/kdp_pipeline/planning/__init__.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/planning
+copying build/lib/kdp_pipeline/planning/acceptance.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/planning
+creating build/bdist.linux-x86_64/wheel/kdp_pipeline/providers
+copying build/lib/kdp_pipeline/providers/costs.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/providers
+copying build/lib/kdp_pipeline/providers/configuration.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/providers
+copying build/lib/kdp_pipeline/providers/base.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/providers
+copying build/lib/kdp_pipeline/providers/__init__.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/providers
+copying build/lib/kdp_pipeline/providers/contracts.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/providers
+copying build/lib/kdp_pipeline/providers/settings.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/providers
+copying build/lib/kdp_pipeline/providers/openai_compatible.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/providers
+copying build/lib/kdp_pipeline/providers/fake.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/providers
+creating build/bdist.linux-x86_64/wheel/kdp_pipeline/editorial
+copying build/lib/kdp_pipeline/editorial/service.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/editorial
+copying build/lib/kdp_pipeline/editorial/__init__.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/editorial
+creating build/bdist.linux-x86_64/wheel/kdp_pipeline/inspection
+copying build/lib/kdp_pipeline/inspection/service.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/inspection
+copying build/lib/kdp_pipeline/inspection/__init__.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/inspection
+copying build/lib/kdp_pipeline/__init__.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline
+creating build/bdist.linux-x86_64/wheel/kdp_pipeline/continuity
+copying build/lib/kdp_pipeline/continuity/service.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/continuity
+copying build/lib/kdp_pipeline/continuity/__init__.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/continuity
+creating build/bdist.linux-x86_64/wheel/kdp_pipeline/workspace
+copying build/lib/kdp_pipeline/workspace/render.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/workspace
+copying build/lib/kdp_pipeline/workspace/authoring.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/workspace
+copying build/lib/kdp_pipeline/workspace/review.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/workspace
+copying build/lib/kdp_pipeline/workspace/__init__.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/workspace
+creating build/bdist.linux-x86_64/wheel/kdp_pipeline/workspace/static
+copying build/lib/kdp_pipeline/workspace/static/workspace.css -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/workspace/static
+copying build/lib/kdp_pipeline/workspace/static/workspace.js -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/workspace/static
+copying build/lib/kdp_pipeline/workspace/actions.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/workspace
+copying build/lib/kdp_pipeline/workspace/inspection.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/workspace
+copying build/lib/kdp_pipeline/workspace/dashboard.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/workspace
+copying build/lib/kdp_pipeline/workspace/server.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/workspace
+creating build/bdist.linux-x86_64/wheel/kdp_pipeline/release
+copying build/lib/kdp_pipeline/release/service.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/release
+copying build/lib/kdp_pipeline/release/__init__.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/release
+creating build/bdist.linux-x86_64/wheel/kdp_pipeline/models
+copying build/lib/kdp_pipeline/models/canon.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/models
+copying build/lib/kdp_pipeline/models/editorial.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/models
+copying build/lib/kdp_pipeline/models/__init__.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/models
+copying build/lib/kdp_pipeline/models/schemas.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/models
+copying build/lib/kdp_pipeline/models/chapter.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/models
+copying build/lib/kdp_pipeline/models/planning.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/models
+creating build/bdist.linux-x86_64/wheel/kdp_pipeline/storage
+copying build/lib/kdp_pipeline/storage/service.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/storage
+copying build/lib/kdp_pipeline/storage/__init__.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/storage
+copying build/lib/kdp_pipeline/storage/files.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/storage
+copying build/lib/kdp_pipeline/storage/audit.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/storage
+copying build/lib/kdp_pipeline/storage/db.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/storage
+copying build/lib/kdp_pipeline/storage/approval_conditions.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/storage
+creating build/bdist.linux-x86_64/wheel/kdp_pipeline/cli
+copying build/lib/kdp_pipeline/cli/__init__.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/cli
+copying build/lib/kdp_pipeline/cli/app.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/cli
+creating build/bdist.linux-x86_64/wheel/kdp_pipeline/prompts
+copying build/lib/kdp_pipeline/prompts/__init__.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/prompts
+copying build/lib/kdp_pipeline/prompts/registry.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/prompts
+creating build/bdist.linux-x86_64/wheel/kdp_pipeline/build
+copying build/lib/kdp_pipeline/build/service.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/build
+copying build/lib/kdp_pipeline/build/__init__.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/build
+creating build/bdist.linux-x86_64/wheel/kdp_pipeline/chapters
+copying build/lib/kdp_pipeline/chapters/service.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/chapters
+copying build/lib/kdp_pipeline/chapters/__init__.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/chapters
+creating build/bdist.linux-x86_64/wheel/kdp_pipeline/core
+copying build/lib/kdp_pipeline/core/ids.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/core
+copying build/lib/kdp_pipeline/core/__init__.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/core
+copying build/lib/kdp_pipeline/core/hashing.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/core
+copying build/lib/kdp_pipeline/core/state_machine.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/core
+creating build/bdist.linux-x86_64/wheel/kdp_pipeline/context
+copying build/lib/kdp_pipeline/context/__init__.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/context
+copying build/lib/kdp_pipeline/context/manifest.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/context
+creating build/bdist.linux-x86_64/wheel/kdp_pipeline/concept
+copying build/lib/kdp_pipeline/concept/service.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/concept
+copying build/lib/kdp_pipeline/concept/__init__.py -> build/bdist.linux-x86_64/wheel/./kdp_pipeline/concept
+running install_egg_info
+Copying src/kdp_pipeline.egg-info to build/bdist.linux-x86_64/wheel/./kdp_pipeline-0.1.0-py3.12.egg-info
+running install_scripts
+creating build/bdist.linux-x86_64/wheel/kdp_pipeline-0.1.0.dist-info/WHEEL
+creating '/tmp/claude-0/dist/.tmp-j8kls8lc/kdp_pipeline-0.1.0-py3-none-any.whl' and adding 'build/bdist.linux-x86_64/wheel' to it
+adding 'kdp_pipeline/__init__.py'
+adding 'kdp_pipeline/build/__init__.py'
+adding 'kdp_pipeline/build/service.py'
+adding 'kdp_pipeline/chapter/__init__.py'
+adding 'kdp_pipeline/chapter/service.py'
+adding 'kdp_pipeline/chapters/__init__.py'
+adding 'kdp_pipeline/chapters/service.py'
+adding 'kdp_pipeline/cli/__init__.py'
+adding 'kdp_pipeline/cli/app.py'
+adding 'kdp_pipeline/concept/__init__.py'
+adding 'kdp_pipeline/concept/service.py'
+adding 'kdp_pipeline/context/__init__.py'
+adding 'kdp_pipeline/context/manifest.py'
+adding 'kdp_pipeline/continuity/__init__.py'
+adding 'kdp_pipeline/continuity/service.py'
+adding 'kdp_pipeline/core/__init__.py'
+adding 'kdp_pipeline/core/hashing.py'
+adding 'kdp_pipeline/core/ids.py'
+adding 'kdp_pipeline/core/state_machine.py'
+adding 'kdp_pipeline/editorial/__init__.py'
+adding 'kdp_pipeline/editorial/service.py'
+adding 'kdp_pipeline/generation/__init__.py'
+adding 'kdp_pipeline/generation/service.py'
+adding 'kdp_pipeline/inspection/__init__.py'
+adding 'kdp_pipeline/inspection/service.py'
+adding 'kdp_pipeline/models/__init__.py'
+adding 'kdp_pipeline/models/canon.py'
+adding 'kdp_pipeline/models/chapter.py'
+adding 'kdp_pipeline/models/editorial.py'
+adding 'kdp_pipeline/models/planning.py'
+adding 'kdp_pipeline/models/schemas.py'
+adding 'kdp_pipeline/planning/__init__.py'
+adding 'kdp_pipeline/planning/acceptance.py'
+adding 'kdp_pipeline/planning/service.py'
+adding 'kdp_pipeline/prompts/__init__.py'
+adding 'kdp_pipeline/prompts/registry.py'
+adding 'kdp_pipeline/providers/__init__.py'
+adding 'kdp_pipeline/providers/base.py'
+adding 'kdp_pipeline/providers/configuration.py'
+adding 'kdp_pipeline/providers/contracts.py'
+adding 'kdp_pipeline/providers/costs.py'
+adding 'kdp_pipeline/providers/fake.py'
+adding 'kdp_pipeline/providers/openai_compatible.py'
+adding 'kdp_pipeline/providers/settings.py'
+adding 'kdp_pipeline/release/__init__.py'
+adding 'kdp_pipeline/release/service.py'
+adding 'kdp_pipeline/storage/__init__.py'
+adding 'kdp_pipeline/storage/approval_conditions.py'
+adding 'kdp_pipeline/storage/audit.py'
+adding 'kdp_pipeline/storage/db.py'
+adding 'kdp_pipeline/storage/files.py'
+adding 'kdp_pipeline/storage/service.py'
+adding 'kdp_pipeline/verification/__init__.py'
+adding 'kdp_pipeline/verification/service.py'
+adding 'kdp_pipeline/workspace/__init__.py'
+adding 'kdp_pipeline/workspace/actions.py'
+adding 'kdp_pipeline/workspace/authoring.py'
+adding 'kdp_pipeline/workspace/dashboard.py'
+adding 'kdp_pipeline/workspace/inspection.py'
+adding 'kdp_pipeline/workspace/render.py'
+adding 'kdp_pipeline/workspace/review.py'
+adding 'kdp_pipeline/workspace/server.py'
+adding 'kdp_pipeline/workspace/static/workspace.css'
+adding 'kdp_pipeline/workspace/static/workspace.js'
+adding 'kdp_pipeline-0.1.0.dist-info/METADATA'
+adding 'kdp_pipeline-0.1.0.dist-info/WHEEL'
+adding 'kdp_pipeline-0.1.0.dist-info/entry_points.txt'
+adding 'kdp_pipeline-0.1.0.dist-info/top_level.txt'
+adding 'kdp_pipeline-0.1.0.dist-info/RECORD'
+removing build/bdist.linux-x86_64/wheel
+Successfully built kdp_pipeline-0.1.0-py3-none-any.whl

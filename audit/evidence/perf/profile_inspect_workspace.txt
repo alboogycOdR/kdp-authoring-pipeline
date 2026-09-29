@@ -1,0 +1,28 @@
+         351985 function calls (347919 primitive calls) in 0.655 seconds
+
+   Ordered by: cumulative time
+   List reduced from 931 to 18 due to restriction <18>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.002    0.002    0.656    0.656 /home/user/kdp-authoring-pipeline/src/kdp_pipeline/workspace/inspection.py:19(inspect_workspace)
+        3    0.021    0.007    0.585    0.195 /home/user/kdp-authoring-pipeline/src/kdp_pipeline/inspection/service.py:73(inspect_title)
+      247    0.003    0.000    0.401    0.002 /tmp/claude-0/venv312/lib/python3.12/site-packages/sqlalchemy/orm/session.py:2201(_execute_internal)
+      247    0.001    0.000    0.373    0.002 /tmp/claude-0/venv312/lib/python3.12/site-packages/sqlalchemy/orm/context.py:306(orm_execute_statement)
+       58    0.000    0.000    0.285    0.005 /tmp/claude-0/venv312/lib/python3.12/site-packages/sqlalchemy/orm/session.py:2565(scalars)
+      247    0.001    0.000    0.225    0.001 /tmp/claude-0/venv312/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1404(execute)
+      247    0.000    0.000    0.224    0.001 /tmp/claude-0/venv312/lib/python3.12/site-packages/sqlalchemy/sql/elements.py:524(_execute_on_connection)
+      247    0.003    0.000    0.224    0.001 /tmp/claude-0/venv312/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1618(_execute_clauseelement)
+      247    0.002    0.000    0.162    0.001 /tmp/claude-0/venv312/lib/python3.12/site-packages/sqlalchemy/sql/elements.py:694(_compile_w_cache)
+      247    0.001    0.000    0.148    0.001 /tmp/claude-0/venv312/lib/python3.12/site-packages/sqlalchemy/orm/context.py:595(orm_setup_cursor_result)
+      247    0.005    0.000    0.144    0.001 /tmp/claude-0/venv312/lib/python3.12/site-packages/sqlalchemy/orm/loading.py:80(instances)
+       80    0.000    0.000    0.137    0.002 /tmp/claude-0/venv312/lib/python3.12/site-packages/sqlalchemy/sql/elements.py:324(_compiler)
+       80    0.001    0.000    0.137    0.002 /tmp/claude-0/venv312/lib/python3.12/site-packages/sqlalchemy/sql/compiler.py:1438(__init__)
+       80    0.001    0.000    0.134    0.002 /tmp/claude-0/venv312/lib/python3.12/site-packages/sqlalchemy/sql/compiler.py:893(__init__)
+    88/80    0.000    0.000    0.133    0.002 /tmp/claude-0/venv312/lib/python3.12/site-packages/sqlalchemy/sql/compiler.py:971(process)
+  1358/80    0.004    0.000    0.133    0.002 /tmp/claude-0/venv312/lib/python3.12/site-packages/sqlalchemy/sql/visitors.py:116(_compiler_dispatch)
+       80    0.003    0.000    0.132    0.002 /tmp/claude-0/venv312/lib/python3.12/site-packages/sqlalchemy/sql/compiler.py:5047(visit_select)
+      247    0.121    0.000    0.122    0.000 /tmp/claude-0/venv312/lib/python3.12/site-packages/sqlalchemy/engine/result.py:262(__init__)
+
+
+
+{'create_engine': 10, 'init_db': 3, 'execute': 247, 'sha256_file': 507, 'dispose': 10}

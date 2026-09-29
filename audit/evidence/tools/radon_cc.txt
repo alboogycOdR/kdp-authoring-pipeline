@@ -1,0 +1,85 @@
+src/kdp_pipeline/generation/service.py
+    C 278:0 GenerationService - F (42)
+    M 280:4 GenerationService.generate - F (41)
+    F 231:0 _safe_response_diagnostics - C (18)
+src/kdp_pipeline/chapter/service.py
+    F 250:0 accept_chapter - D (29)
+    F 92:0 _chapter_authoring_context - C (20)
+    M 183:4 ChapterService.revise - C (19)
+    C 135:0 ChapterService - C (16)
+src/kdp_pipeline/verification/service.py
+    F 105:0 decide_verification - C (15)
+src/kdp_pipeline/planning/service.py
+    M 18:4 PlanningService.generate - D (24)
+src/kdp_pipeline/planning/acceptance.py
+    F 51:0 accept_planning_artifact - D (28)
+src/kdp_pipeline/providers/costs.py
+    F 36:0 evaluate_and_reserve - D (27)
+    F 278:0 project_budget_report - D (25)
+    F 100:0 calculate_usage_cost - C (18)
+    F 237:0 set_project_budget - C (11)
+src/kdp_pipeline/providers/configuration.py
+    F 280:0 check_provider_profile - C (16)
+    F 223:0 resolve_project_provider - C (12)
+    F 79:0 add_provider_profile - C (11)
+    F 155:0 set_provider_timeouts - C (11)
+src/kdp_pipeline/providers/settings.py
+    M 64:4 ProviderProfileSettings.validate_type_fields - C (13)
+src/kdp_pipeline/providers/openai_compatible.py
+    M 166:4 OpenAICompatibleProvider.generate - F (45)
+    C 113:0 OpenAICompatibleProvider - C (11)
+src/kdp_pipeline/editorial/service.py
+    F 143:0 create_revision_recommendation - C (17)
+    C 69:0 StructuredEditorialService - C (15)
+    M 71:4 StructuredEditorialService.analyze - C (14)
+src/kdp_pipeline/inspection/service.py
+    F 73:0 inspect_title - F (316)
+    F 472:0 doctor - F (48)
+src/kdp_pipeline/continuity/service.py
+    C 161:0 ContinuityService - C (15)
+    F 126:0 _validate_output - C (14)
+    M 163:4 ContinuityService.analyze - C (14)
+src/kdp_pipeline/workspace/render.py
+    F 57:0 _attention - F (50)
+    F 341:0 _section_cards - E (31)
+    F 272:0 _workspace_content - D (28)
+    F 772:0 render_review - D (28)
+    F 550:0 render_title - D (24)
+    F 39:0 _assets_needing_approval - C (11)
+    F 730:0 _release_checklist - C (11)
+src/kdp_pipeline/workspace/authoring.py
+    F 283:0 create_manual_revision - D (24)
+    F 187:0 run_authoring_action - C (20)
+src/kdp_pipeline/workspace/review.py
+    F 66:0 inspect_review - F (91)
+src/kdp_pipeline/workspace/actions.py
+    F 115:0 run_review_decision - E (31)
+    F 57:0 run_action - C (13)
+src/kdp_pipeline/workspace/inspection.py
+    F 19:0 inspect_workspace - C (19)
+src/kdp_pipeline/workspace/dashboard.py
+    F 96:0 generate_dashboard - D (24)
+    F 39:0 _title_card - D (21)
+src/kdp_pipeline/release/service.py
+    F 153:0 create_release_candidate - E (35)
+    F 107:0 _blockers - D (30)
+    F 242:0 record_candidate_check - D (24)
+    F 327:0 export_release_packet - C (11)
+src/kdp_pipeline/storage/service.py
+    F 167:0 _accepted_planning_asset - C (14)
+src/kdp_pipeline/build/service.py
+    F 110:0 build_manuscript - F (63)
+    F 60:0 accept_matter - C (14)
+src/kdp_pipeline/chapters/service.py
+    F 90:0 chapter_status - F (51)
+    F 30:0 queue_chapters - C (14)
+    F 150:0 record_chapter_summary - C (14)
+src/kdp_pipeline/concept/service.py
+    C 43:0 ConceptService - D (21)
+    F 109:0 validate_concept - C (20)
+    M 45:4 ConceptService.generate - C (20)
+    F 246:0 accept_concept - C (18)
+    F 139:0 score_concept - C (13)
+
+59 blocks (classes, functions, methods) analyzed.
+Average complexity: D (28.694915254237287)

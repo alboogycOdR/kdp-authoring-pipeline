@@ -1,0 +1,9 @@
+Name
+----
+kdp_pipeline/workspace/static/workspace.css
+kdp_pipeline/workspace/static/workspace.js
+kdp_pipeline-0.1.0.dist-info/METADATA
+kdp_pipeline-0.1.0.dist-info/WHEEL
+kdp_pipeline-0.1.0.dist-info/entry_points.txt
+kdp_pipeline-0.1.0.dist-info/top_level.txt
+kdp_pipeline-0.1.0.dist-info/RECORD

@@ -1,0 +1,292 @@
+diff --git a/src/kdp_pipeline/generation/service.py b/src/kdp_pipeline/generation/service.py
+index e1c4edd..bb5129e 100644
+--- a/src/kdp_pipeline/generation/service.py
++++ b/src/kdp_pipeline/generation/service.py
+@@ -275,6 +275,37 @@ def _reject_empty_output(root: Path, job_id: str, diagnostics: dict[str, Any]) -
+         session.commit()
+ 
+ 
++_INCOMPLETE_FINISH_REASONS = {"length", "content_filter", "max_tokens", "incomplete"}
++
++
++def _unusable_completion(diagnostics: dict[str, Any]) -> str | None:
++    """Truncated, filtered or refused completions must never become assets (KDP-AUD-010)."""
++    reason = diagnostics.get("finish_reason")
++    if reason in _INCOMPLETE_FINISH_REASONS:
++        return f"provider output is incomplete (finish_reason={reason})"
++    if diagnostics.get("incomplete_reason"):
++        return f"provider output is incomplete ({diagnostics['incomplete_reason']})"
++    if diagnostics.get("refusal_present"):
++        return "provider refused the request"
++    return None
++
++
++def _reject_unusable_output(root: Path, job_id: str, reason: str, diagnostics: dict[str, Any]) -> None:
++    with session_scope(root) as session:
++        job = session.get(JobRow, job_id)
++        if job is None:
++            return
++        job.status = "failed"
++        job.error = f"Generation rejected: {reason}"
++        job.completed_at = utcnow()
++        AuditEventWriter.append(
++            session, actor_id="system", action="generation.unusable_output_rejected",
++            entity_type="job", entity_id=job_id, correlation_id=job_id, result="failed",
++            metadata={"reason": reason, "response_diagnostics": diagnostics, "usage_preserved": True},
++        )
++        session.commit()
++
++
+ class GenerationService:
+     @staticmethod
+     async def generate(
+@@ -340,6 +371,13 @@ class GenerationService:
+             if title is None:
+                 raise ValueError(f"Unknown title: {title_id}")
+             existing = session.scalar(select(JobRow).where(JobRow.idempotency_key == idempotency_key))
++            if existing is not None and existing.status == "failed":
++                # An operator-initiated re-run after a recorded failure is a new, separately budgeted
++                # and audited attempt; nothing here retries automatically (KDP-AUD-013).
++                prior = session.scalars(select(JobRow.idempotency_key).where(
++                    JobRow.idempotency_key.like(f"{idempotency_key}%"))).all()
++                idempotency_key = f"{idempotency_key}:attempt-{len(prior) + 1}"
++                existing = session.scalar(select(JobRow).where(JobRow.idempotency_key == idempotency_key))
+             if existing is not None:
+                 if existing.status == "success":
+                     existing_job = existing
+@@ -508,6 +546,10 @@ class GenerationService:
+         if not generation_result.text.strip():
+             _reject_empty_output(root, job.job_id, response_diagnostics)
+             raise GenerationServiceError("Generation rejected: provider output was empty or whitespace-only")
++        unusable = _unusable_completion(response_diagnostics)
++        if unusable:
++            _reject_unusable_output(root, job.job_id, unusable, response_diagnostics)
++            raise GenerationServiceError(f"Generation rejected: {unusable}")
+ 
+         output_path: Path | None = None
+         try:
+@@ -555,6 +597,7 @@ class GenerationService:
+                     output_hash=output_hash,
+                     generation_timestamp=utcnow(),
+                     ai_classification="AI_GENERATED",
++                    prompt_template_sha256=rendered_prompt.template_sha256,
+                 )
+                 session.add(asset)
+                 session.add(provenance_row)
+diff --git a/src/kdp_pipeline/prompts/registry.py b/src/kdp_pipeline/prompts/registry.py
+index eb7b29c..1d6187e 100644
+--- a/src/kdp_pipeline/prompts/registry.py
++++ b/src/kdp_pipeline/prompts/registry.py
+@@ -46,6 +46,8 @@ class PromptRegistry:
+ 
+         templates: dict[tuple[str, str], PromptTemplate] = {}
+         for path in sorted(self.prompts_root.rglob("*.md")):
++            if path.name.upper() == "README.MD" or path.name.startswith("_"):
++                continue  # documentation beside prompts must not disable every generation path (KDP-AUD-030)
+             match = _VERSIONED_NAME.match(path.name)
+             if not match:
+                 raise PromptRegistryError(
+@@ -108,4 +110,5 @@ class PromptRegistry:
+             template_version=template.template_version,
+             rendered_text=rendered,
+             rendered_sha256=sha256_text(rendered),
++            template_sha256=sha256_text(template.source_text),
+         )
+diff --git a/src/kdp_pipeline/providers/contracts.py b/src/kdp_pipeline/providers/contracts.py
+index 859e57f..7f3f239 100644
+--- a/src/kdp_pipeline/providers/contracts.py
++++ b/src/kdp_pipeline/providers/contracts.py
+@@ -16,6 +16,7 @@ class RenderedPrompt(BaseModel):
+     template_version: str
+     rendered_text: str
+     rendered_sha256: str
++    template_sha256: str | None = None  # hash of the template file as read (KDP-AUD-029)
+ 
+     @model_validator(mode="after")
+     def validate_hash(self) -> "RenderedPrompt":
+diff --git a/src/kdp_pipeline/providers/costs.py b/src/kdp_pipeline/providers/costs.py
+index 70eb361..3308f41 100644
+--- a/src/kdp_pipeline/providers/costs.py
++++ b/src/kdp_pipeline/providers/costs.py
+@@ -111,13 +111,9 @@ def calculate_usage_cost(usage, pricing: ModelPricingRow | None) -> dict[str, An
+     currency = usage.currency
+     source = "unknown"
+     cost_details: dict[str, Any] = {"basis": "unknown", "reason": "no provider cost or configured pricing"}
+-    if usage.reported_cost is not None:
+-        cost, source = usage.reported_cost, "provider_reported"
+-        cost_details = {"basis": "provider_reported"}
+-    elif usage.estimated_cost is not None:
+-        cost, source = usage.estimated_cost, "estimated"
+-        cost_details = {"basis": "provider_estimate"}
+-    elif (pricing is not None and input_tokens is not None and output_tokens is not None):
++    # Configured operator rates are authoritative when they exist. A provider-reported cost is
++    # recorded as a detail and only raises the figure, never lowers it (KDP-AUD-007).
++    if (pricing is not None and input_tokens is not None and output_tokens is not None):
+         cached = min(cached_tokens or 0, input_tokens)
+         uncached = input_tokens - cached
+         cached_rate = (pricing.cached_input_usd_per_million
+@@ -133,6 +129,16 @@ def calculate_usage_cost(usage, pricing: ModelPricingRow | None) -> dict[str, An
+                         "output_usd_per_million": pricing.output_usd_per_million,
+                         "cached_input_usd_per_million": pricing.cached_input_usd_per_million,
+                         "currency": pricing.currency, "pricing_updated_at": pricing.updated_at.isoformat()}
++        if usage.reported_cost is not None:
++            cost_details["provider_reported_cost"] = usage.reported_cost
++            if usage.reported_cost > cost:
++                cost, cost_details["basis"] = usage.reported_cost, "provider_reported_higher_than_rates"
++    elif usage.reported_cost is not None:
++        cost, source = usage.reported_cost, "provider_reported"
++        cost_details = {"basis": "provider_reported"}
++    elif usage.estimated_cost is not None:
++        cost, source = usage.estimated_cost, "estimated"
++        cost_details = {"basis": "provider_estimate"}
+     if currency is None and (source == "estimated" or source == "provider_reported"):
+         currency = pricing.currency if pricing is not None else "USD"
+     if cost is not None and (not isfinite(float(cost)) or cost < 0):
+diff --git a/src/kdp_pipeline/providers/openai_compatible.py b/src/kdp_pipeline/providers/openai_compatible.py
+index a0341fe..c47c08c 100644
+--- a/src/kdp_pipeline/providers/openai_compatible.py
++++ b/src/kdp_pipeline/providers/openai_compatible.py
+@@ -47,6 +47,23 @@ class ProviderResponseError(OpenAICompatibleProviderError):
+     pass
+ 
+ 
++MAX_RESPONSE_BYTES = 4 * 1024 * 1024  # KDP-AUD-023: a chapter response is kilobytes, never megabytes
++
++
++def _usage_int(value: object) -> int | None:
++    """Accept only non-negative integers (or integral strings); anything else is recorded as unknown.
++
++    A malformed usage block must never turn a billed 200 response into an exception that
++    loses the usage record (KDP-AUD-022)."""
++    if isinstance(value, bool):
++        return None
++    if isinstance(value, str) and value.isdecimal():
++        value = int(value)
++    if isinstance(value, float) and value.is_integer():
++        value = int(value)
++    return value if isinstance(value, int) and 0 <= value < 10**12 else None
++
++
+ class OpenAICompatibleConfig(BaseModel):
+     base_url: str = "https://api.openai.com/v1"
+     model: str = Field(min_length=1)
+@@ -191,11 +208,19 @@ class OpenAICompatibleProvider:
+         started = time.perf_counter()
+         try:
+             try:
+-                response = await client.post(
+-                    f"{self.config.base_url}/chat/completions",
+-                    headers=headers,
+-                    json=payload,
+-                )
++                async with client.stream("POST", f"{self.config.base_url}/chat/completions",
++                                         headers=headers, json=payload) as streamed:
++                    declared = streamed.headers.get("content-length")
++                    if declared and declared.isdigit() and int(declared) > MAX_RESPONSE_BYTES:
++                        raise ProviderResponseError("Provider response exceeds the maximum accepted size")
++                    chunks, received = [], 0
++                    async for chunk in streamed.aiter_bytes():
++                        received += len(chunk)
++                        if received > MAX_RESPONSE_BYTES:
++                            raise ProviderResponseError("Provider response exceeds the maximum accepted size")
++                        chunks.append(chunk)
++                    response = httpx.Response(streamed.status_code, headers=streamed.headers,
++                                              content=b"".join(chunks), request=streamed.request)
+             except httpx.HTTPError as exc:
+                 raise ProviderTransportError(
+                     f"OpenAI-compatible provider transport failure: {type(exc).__name__}"
+@@ -264,16 +289,17 @@ class OpenAICompatibleProvider:
+                 ),
+             }
+             diagnostics = {key: value for key, value in diagnostics.items() if value is not None}
++            reported_cost = usage.get("cost") if isinstance(usage, dict) else None
++            reported_cost = (float(reported_cost) if isinstance(reported_cost, (int, float))
++                             and not isinstance(reported_cost, bool) and 0 <= reported_cost < 1e6 else None)
+             usage_metadata = UsageMetadata(
+-                input_tokens=usage.get("prompt_tokens") if isinstance(usage, dict) else None,
+-                output_tokens=usage.get("completion_tokens") if isinstance(usage, dict) else None,
+-                total_tokens=usage.get("total_tokens") if isinstance(usage, dict) else None,
+-                cached_input_tokens=(usage.get("prompt_tokens_details", {}).get("cached_tokens")
+-                                     if isinstance(usage, dict) and isinstance(usage.get("prompt_tokens_details"), dict)
+-                                     else None),
+-                reported_cost=(usage.get("cost") if isinstance(usage, dict)
+-                               and isinstance(usage.get("cost"), (int, float)) else None),
+-                currency="USD" if isinstance(usage, dict) and isinstance(usage.get("cost"), (int, float)) else None,
++                input_tokens=_usage_int(usage.get("prompt_tokens")),
++                output_tokens=_usage_int(usage.get("completion_tokens")),
++                total_tokens=_usage_int(usage.get("total_tokens")),
++                cached_input_tokens=(_usage_int(usage.get("prompt_tokens_details", {}).get("cached_tokens"))
++                                     if isinstance(usage.get("prompt_tokens_details"), dict) else None),
++                reported_cost=reported_cost,
++                currency="USD" if reported_cost is not None else None,
+             ) if isinstance(usage, dict) else None
+ 
+             response_id = body.get("id") if isinstance(body, dict) else None
+diff --git a/src/kdp_pipeline/providers/settings.py b/src/kdp_pipeline/providers/settings.py
+index dfd5f99..0d6f934 100644
+--- a/src/kdp_pipeline/providers/settings.py
++++ b/src/kdp_pipeline/providers/settings.py
+@@ -5,8 +5,25 @@ import ipaddress
+ from typing import Any, Literal
+ from urllib.parse import urlparse
+ 
++import os
++
+ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+ 
++# A profile must not be able to turn an unrelated secret (cloud, VCS, database, SSH, the app's own
++# settings) into a bearer token for an arbitrary host (KDP-AUD-009).
++_ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
++_FORBIDDEN_ENV = re.compile(
++    r"^(?:AWS_|AZURE_|GOOGLE_|GCP_|GCLOUD|GITHUB_|GH_|GITLAB_|CI_|ACTIONS_|DOCKER|KUBE|SSH_|NPM_|PYPI_|TWINE_|"
++    r"DATABASE|PG|MYSQL|REDIS|SLACK_|STRIPE_|TAILSCALE|SECRET_KEY$|DJANGO_|FLASK_)|PASSWORD|PASSWD|SESSION",
++    re.IGNORECASE)
++_DEFAULT_PROVIDER_HOSTS = {"api.openai.com"}
++
++
++def allowed_provider_hosts() -> set[str]:
++    """Remote provider hosts the operator has allowed; loopback is always allowed."""
++    extra = os.getenv("KDP_PROVIDER_HOST_ALLOWLIST", "")
++    return _DEFAULT_PROVIDER_HOSTS | {host.strip().lower() for host in extra.split(",") if host.strip()}
++
+ 
+ class ProviderProfileSettings(BaseModel):
+     """Non-secret provider configuration suitable for SQLite and future UI DTOs."""
+@@ -41,8 +58,8 @@ class ProviderProfileSettings(BaseModel):
+     @field_validator("api_key_env")
+     @classmethod
+     def validate_api_key_env(cls, value: str | None) -> str | None:
+-        if value is not None and not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", value):
+-            raise ValueError("api_key_env must be an environment variable name")
++        if value is not None and (not _ENV_NAME.fullmatch(value) or _FORBIDDEN_ENV.search(value)):
++            raise ValueError("api_key_env must name a dedicated provider key variable, not a cloud/VCS/database/app secret")
+         return value
+ 
+     @field_validator("base_url")
+@@ -56,8 +73,11 @@ class ProviderProfileSettings(BaseModel):
+             raise ValueError("base_url must be an absolute HTTP(S) URL without credentials")
+         if parsed.query or parsed.fragment:
+             raise ValueError("base_url must not contain a query string or fragment")
+-        if parsed.scheme == "http" and parsed.hostname not in {"localhost", "127.0.0.1", "::1"}:
++        loopback = parsed.hostname in {"localhost", "127.0.0.1", "::1"}
++        if parsed.scheme == "http" and not loopback:
+             raise ValueError("HTTP is allowed only for loopback provider endpoints")
++        if not loopback and parsed.hostname.lower() not in allowed_provider_hosts():
++            raise ValueError("Provider host is not in KDP_PROVIDER_HOST_ALLOWLIST; add it deliberately before use")
+         return value
+ 
+     @model_validator(mode="after")
+diff --git a/tests/conftest.py b/tests/conftest.py
+new file mode 100644
+index 0000000..d72252e
+--- /dev/null
++++ b/tests/conftest.py
+@@ -0,0 +1,8 @@
++"""Suite-wide test configuration.
++
++``provider.example`` is the fixture host used by the provider tests; with the provider host
++allow-list (KDP-AUD-009) it must be allowed explicitly, exactly as an operator would.
++"""
++import os
++
++os.environ.setdefault("KDP_PROVIDER_HOST_ALLOWLIST", "provider.example")

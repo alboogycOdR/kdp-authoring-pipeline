@@ -1,0 +1,153 @@
+{
+  "pages": {
+    "home": {
+      "overflow_viewports": [
+        "768x1024"
+      ],
+      "violations": [],
+      "text_len": 2594,
+      "ids_shown": 16,
+      "headings": [
+        "H1:Workspace",
+        "H2:Start a new book",
+        "H2:Attention",
+        "H2:Needs Review",
+        "H2:Needs Approval",
+        "H2:Needs Verification",
+        "H2:Blocked",
+        "H2:Ready",
+        "H2:Recent Activity",
+        "H2:Projects",
+        "H2:Titles"
+      ]
+    },
+    "help": {
+      "overflow_viewports": [
+        "768x1024"
+      ],
+      "violations": [],
+      "text_len": 4257,
+      "ids_shown": 0,
+      "headings": [
+        "H1:From your first idea to a book ready for",
+        "H2:Six stages, one book",
+        "H3:Save your idea",
+        "H3:Shape and approve the concept",
+        "H3:Set the book\u2019s direction",
+        "H3:Draft and review one chapter at a time",
+        "H3:Resolve sources, claims, and rights",
+        "H3:Build and review the release packet",
+        "H2:Before you use AI",
+        "H2:You stay in control",
+        "H2:Common questions"
+      ]
+    },
+    "project": {
+      "overflow_viewports": [
+        "768x1024"
+      ],
+      "violations": [],
+      "text_len": 2191,
+      "ids_shown": 16,
+      "headings": [
+        "H1:Audit Book project",
+        "H2:Manage this project",
+        "H2:Attention",
+        "H2:Needs Review",
+        "H2:Needs Approval",
+        "H2:Needs Verification",
+        "H2:Blocked",
+        "H2:Ready",
+        "H2:Recent Activity",
+        "H2:Titles"
+      ]
+    },
+    "title": {
+      "overflow_viewports": [
+        "768x1024"
+      ],
+      "violations": [],
+      "text_len": 4727,
+      "ids_shown": 16,
+      "headings": [
+        "H1:Audit Book",
+        "H2:Overview",
+        "H2:Book authoring",
+        "H3:1. Develop your idea",
+        "H3:2. Plan the book",
+        "H3:3. Draft and review chapters",
+        "H2:Recent jobs",
+        "H2:Awaiting acceptance",
+        "H2:Workflow actions",
+        "H3:Verification",
+        "H3:Chapter queue",
+        "H3:Manuscript build",
+        "H3:Release preparation",
+        "H2:Planning",
+        "H2:Chapters"
+      ]
+    },
+    "review_asset": {
+      "overflow_viewports": [
+        "768x1024"
+      ],
+      "violations": [],
+      "text_len": 2155,
+      "ids_shown": 11,
+      "headings": [
+        "H1:Review asset",
+        "H2:1. Artefact",
+        "H3:Complete artefact text",
+        "H2:2. Provenance",
+        "H2:3. Findings",
+        "H2:4. Blockers",
+        "H2:5. Conditions",
+        "H2:6. Consequences",
+        "H2:7. Human decision"
+      ]
+    },
+    "review_verification": {
+      "overflow_viewports": [
+        "768x1024"
+      ],
+      "violations": [],
+      "text_len": 1517,
+      "ids_shown": 2,
+      "headings": [
+        "H1:Review verification",
+        "H2:1. Artefact",
+        "H2:2. Provenance",
+        "H2:3. Findings",
+        "H2:4. Blockers",
+        "H2:5. Conditions",
+        "H2:6. Consequences",
+        "H2:7. Human decision"
+      ]
+    },
+    "editor": {
+      "overflow_viewports": [
+        "768x1024",
+        "390x844"
+      ],
+      "violations": [],
+      "text_len": 633,
+      "ids_shown": 1,
+      "headings": [
+        "H1:Edit experimental artefact"
+      ]
+    },
+    "not_found": {
+      "overflow_viewports": [
+        "768x1024"
+      ],
+      "violations": [],
+      "text_len": 355,
+      "ids_shown": 0,
+      "headings": [
+        "H1:Workspace"
+      ]
+    },
+    "title_dark_contrast": []
+  },
+  "summary_by_rule": []
+}

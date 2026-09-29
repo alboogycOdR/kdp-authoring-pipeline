@@ -1,0 +1,17 @@
+{
+  "first_build_blockers": [
+    {
+      "type": "scripture_placeholder",
+      "asset_id": "AST-20260929-96BFE5B0",
+      "locator": "chapter-001:line-0003",
+      "text": "[SCRIPTURE NEEDED]"
+    },
+    {
+      "type": "approval_condition",
+      "approval_id": "APR-20260929-5F142615",
+      "asset_id": "AST-20260929-96BFE5B0",
+      "condition": "[SCRIPTURE NEEDED] remains unresolved"
+    }
+  ],
+  "accept_corrected_revision_error": null
+}

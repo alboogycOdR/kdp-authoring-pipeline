@@ -1,0 +1,5 @@
+{
+  "outcome": "ProviderResponseError: Provider response exceeds the maximum accepted size",
+  "rss_growth_mb": 1.0,
+  "largest_draft_bytes": 0
+}

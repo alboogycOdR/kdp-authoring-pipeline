@@ -1,0 +1,14 @@
+[
+  {
+    "status": "WARN",
+    "check": "provider-selection:PRJ-20260929-791F989C",
+    "message": "no provider selected",
+    "recommended_action": "Select an enabled provider profile before running generation."
+  },
+  {
+    "status": "WARN",
+    "check": "usage.pricing",
+    "message": "5 usage event(s) have unknown cost",
+    "recommended_action": "Configure model pricing or accept that these costs cannot be budgeted."
+  }
+]

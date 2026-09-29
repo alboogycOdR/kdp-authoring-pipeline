@@ -1,0 +1,1333 @@
+diff --git a/prompts/editorial/developmental-v1.1.md b/prompts/editorial/developmental-v1.1.md
+new file mode 100644
+index 0000000..757418b
+--- /dev/null
++++ b/prompts/editorial/developmental-v1.1.md
+@@ -0,0 +1,9 @@
++# Developmental editorial pass
++
++Title: {{ working_title }}
++Title ID: {{ title_id }}
++Chapter: {{ chapter_number }}
++
++Identify developmental findings about structure, pacing, purpose, beats, and resolution for the target chapter draft below, judged against the accepted planning context. Return findings, not replacement prose. If the target chapter draft is absent from the context below, say so explicitly instead of guessing.
++
++{{chapter_context}}
+diff --git a/prompts/planning/book-brief-v1.1.md b/prompts/planning/book-brief-v1.1.md
+new file mode 100644
+index 0000000..8a77fc5
+--- /dev/null
++++ b/prompts/planning/book-brief-v1.1.md
+@@ -0,0 +1,12 @@
++# Book brief
++
++Title: {{ working_title }}
++Title ID: {{ title_id }}
++Target reader: {{ target_reader }}
++
++Produce an experimental book brief covering the concept, reader promise, scope, tone, and success criteria. Use only supplied context.
++
++
++Accepted context supplied for this request (operator idea, accepted concept brief, and previously accepted planning artefacts). Use it; do not contradict it silently.
++
++{{planning_context}}
+diff --git a/prompts/planning/chapter-card-v1.1.md b/prompts/planning/chapter-card-v1.1.md
+new file mode 100644
+index 0000000..bc77832
+--- /dev/null
++++ b/prompts/planning/chapter-card-v1.1.md
+@@ -0,0 +1,13 @@
++# Chapter card
++
++Title: {{ working_title }}
++Title ID: {{ title_id }}
++Target reader: {{ target_reader }}
++Chapter number: {{ chapter_number }}
++
++Produce an experimental chapter card containing purpose, reader outcome, key beats, and continuity considerations. Use only supplied context.
++
++
++Accepted context supplied for this request (operator idea, accepted concept brief, and previously accepted planning artefacts). Use it; do not contradict it silently.
++
++{{planning_context}}
+diff --git a/prompts/planning/outline-v1.1.md b/prompts/planning/outline-v1.1.md
+new file mode 100644
+index 0000000..4a1960c
+--- /dev/null
++++ b/prompts/planning/outline-v1.1.md
+@@ -0,0 +1,12 @@
++# Outline
++
++Title: {{ working_title }}
++Title ID: {{ title_id }}
++Target reader: {{ target_reader }}
++
++Produce an experimental book outline with a coherent sequence of sections or chapters. Use only supplied context.
++
++
++Accepted context supplied for this request (operator idea, accepted concept brief, and previously accepted planning artefacts). Use it; do not contradict it silently.
++
++{{planning_context}}
+diff --git a/prompts/planning/positioning-brief-v1.1.md b/prompts/planning/positioning-brief-v1.1.md
+new file mode 100644
+index 0000000..c78f426
+--- /dev/null
++++ b/prompts/planning/positioning-brief-v1.1.md
+@@ -0,0 +1,12 @@
++# Positioning brief
++
++Title: {{ working_title }}
++Title ID: {{ title_id }}
++Target reader: {{ target_reader }}
++
++Produce an experimental positioning brief identifying the audience, promise, differentiator, and comparable market position. Use only supplied context.
++
++
++Accepted context supplied for this request (operator idea, accepted concept brief, and previously accepted planning artefacts). Use it; do not contradict it silently.
++
++{{planning_context}}
+diff --git a/src/kdp_pipeline/build/service.py b/src/kdp_pipeline/build/service.py
+index 5ee2a4f..34ba2b5 100644
+--- a/src/kdp_pipeline/build/service.py
++++ b/src/kdp_pipeline/build/service.py
+@@ -27,7 +27,10 @@ from kdp_pipeline.storage.service import register_asset, session_scope
+ 
+ 
+ _CHAPTER_NAME = re.compile(r"chapter-(?P<number>\d{3})\.md$", re.IGNORECASE)
+-_SCRIPTURE_PLACEHOLDER = re.compile(r"\[SCRIPTURE NEEDED\]", re.IGNORECASE)
++_SCRIPTURE_PLACEHOLDER = re.compile(
++    r"[\[【［(]\s*SCRIPTURE[\s\u00a0]+NEEDED\b[^\]】］)\n]{0,80}[\]】］)]", re.IGNORECASE)
++# Unfinished-text markers that must never reach a release build (KDP-AUD-014).
++_UNFINISHED_MARKERS = re.compile(r"(?im)^\s*(?:TODO|TBD|FIXME)\b|\[(?:TK|TODO|TBD)\]|\blorem ipsum\b")
+ _MATTER_TYPES = {"front": "manuscript.front_matter", "back": "manuscript.back_matter"}
+ 
+ 
+@@ -152,6 +155,10 @@ def build_manuscript(root: Path, *, title_id: str, builder: str = "cli-user") ->
+                 line = text.count("\n", 0, placeholder.start()) + 1
+                 blockers.append({"type": "scripture_placeholder", "asset_id": asset.asset_id,
+                     "locator": f"chapter-{number:03d}:line-{line:04d}", "text": placeholder.group(0)})
++            for marker in _UNFINISHED_MARKERS.finditer(text):
++                line = text.count("\n", 0, marker.start()) + 1
++                blockers.append({"type": "unfinished_text", "asset_id": asset.asset_id,
++                    "locator": f"chapter-{number:03d}:line-{line:04d}", "text": marker.group(0).strip()})
+         chapters.sort(key=lambda item: item[0])
+         numbers = [item[0] for item in chapters]
+         if len(numbers) != len(set(numbers)):
+@@ -215,8 +222,11 @@ def build_manuscript(root: Path, *, title_id: str, builder: str = "cli-user") ->
+             sections.append(accepted_matter["front"].strip())
+         sections.append(toc)
+         for number, _asset, text in chapters:
+-            heading = next((line for line in text.splitlines() if line.startswith("# ")), f"# Chapter {number}")
+-            body = "\n".join(line for line in text.splitlines() if line != heading).strip()
++            lines = text.splitlines()
++            heading_index = next((i for i, line in enumerate(lines) if line.startswith("# ")), None)
++            heading = lines[heading_index] if heading_index is not None else f"# Chapter {number}"
++            # Remove only the heading line itself; repeated identical lines are content (KDP-AUD-032).
++            body = "\n".join(lines[:heading_index] + lines[heading_index + 1:] if heading_index is not None else lines).strip()
+             sections.append(f'<a id="chapter-{number:03d}"></a>\n\n{heading}\n\n{body}'.rstrip())
+         if accepted_matter.get("back", "").strip():
+             sections.append(accepted_matter["back"].strip())
+diff --git a/src/kdp_pipeline/chapter/service.py b/src/kdp_pipeline/chapter/service.py
+index 3b53e04..af82141 100644
+--- a/src/kdp_pipeline/chapter/service.py
++++ b/src/kdp_pipeline/chapter/service.py
+@@ -256,7 +256,15 @@ def accept_chapter(
+     finding_ids: list[str] | None = None,
+     proposal_ids: list[str] | None = None,
+     conditions: list[str] | None = None,
++    supersede: bool = False,
++    supersede_reason: str | None = None,
+ ) -> ChapterAcceptanceResult:
++    """Accept one experimental chapter version.
++
++    ``supersede=True`` explicitly replaces the currently accepted chapter for ``chapter_number``:
++    the old accepted file is archived under ``12_archive/``, its asset row is marked ``superseded``
++    and the replacement gets a fresh approval (KDP-AUD-004). Never implicit.
++    """
+     if chapter_number < 1:
+         raise ChapterAcceptanceError("chapter_number must be positive")
+     if not reviewer.strip():
+@@ -271,6 +279,12 @@ def accept_chapter(
+                 raise ChapterAcceptanceError("Only an experimental chapter asset can be accepted")
+             if source.asset_type not in {ChapterAssetKind.DRAFT.value, ChapterAssetKind.REVISION.value}:
+                 raise ChapterAcceptanceError("Asset is not a chapter draft or revision")
++            source_number = re.search(r"chapter\.(?:draft|revision|revise)\.(\d+)[-.]", Path(source.path).name)
++            if source_number is None or int(source_number.group(1)) != chapter_number:
++                raise ChapterAcceptanceError("Chapter number does not match the source draft (KDP-AUD-016)")
++            owning_title = session.get(TitleRow, source.title_id)
++            if owning_title is None or owning_title.status != TitleState.DRAFTING.value:
++                raise ChapterAcceptanceError("Chapter acceptance requires the title to be in DRAFTING")
+             source_path = Path(source.path)
+             if not source_path.is_file() or sha256_file(source_path) != source.sha256:
+                 raise ChapterAcceptanceError("Source file/hash integrity check failed")
+@@ -314,7 +328,21 @@ def accept_chapter(
+                     session.commit()
+                     return ChapterAcceptanceResult(source, existing, existing_approval, existing_path)
+                 raise ChapterAcceptanceError("An accepted chapter already exists with conflicting destination or hash")
+-            if destination.exists():
++            superseded_row = None
++            if destination.exists() and supersede:
++                if not (supersede_reason and supersede_reason.strip()):
++                    raise ChapterAcceptanceError("Superseding an accepted chapter requires a reason")
++                superseded_row = session.scalar(select(AssetRow).where(
++                    AssetRow.title_id == title.title_id, AssetRow.asset_type == ChapterAssetKind.ACCEPTED.value,
++                    AssetRow.approval_status == "accepted", AssetRow.path == str(destination.resolve())))
++                if superseded_row is None or sha256_file(destination) != superseded_row.sha256:
++                    raise ChapterAcceptanceError("Accepted chapter destination does not match its accepted record")
++                archive = destination.parents[2] / "12_archive" / "accepted-chapters" / f"{superseded_row.asset_id}-{destination.name}"
++                archive.parent.mkdir(parents=True, exist_ok=True)
++                shutil.move(str(destination), archive)
++                superseded_row.approval_status = "superseded"
++                superseded_row.path = str(archive.resolve())
++            elif destination.exists():
+                 if sha256_file(destination) != source.sha256:
+                     raise ChapterAcceptanceError("Accepted chapter destination exists with a conflicting hash")
+                 raise ChapterAcceptanceError("Accepted chapter destination exists without matching accepted state")
+@@ -359,6 +387,8 @@ def accept_chapter(
+                 "destination_path": str(destination), "approval_id": approval.approval_id,
+                 "reviewer": reviewer, "finding_ids": finding_ids or [], "proposal_ids": proposal_ids or [],
+                 "provenance_id": accepted_provenance.provenance_id, "conditions": conditions,
++                "superseded_asset_id": superseded_row.asset_id if superseded_row else None,
++                "supersede_reason": supersede_reason if superseded_row else None,
+             }
+             AuditEventWriter.append(session, actor_id=reviewer, action="chapter.accepted", entity_type="asset", entity_id=accepted.asset_id,
+                                     correlation_id=source.title_id, result="success", before_hash=source.sha256, after_hash=output_hash, metadata=metadata)
+diff --git a/src/kdp_pipeline/chapters/service.py b/src/kdp_pipeline/chapters/service.py
+index 9d08a62..7dbfdb8 100644
+--- a/src/kdp_pipeline/chapters/service.py
++++ b/src/kdp_pipeline/chapters/service.py
+@@ -16,7 +16,7 @@ from kdp_pipeline.storage.files import sha256_file, write_text
+ from kdp_pipeline.storage.service import session_scope
+ 
+ 
+-_CHAPTER_IN_PATH = re.compile(r"chapter\.(?:draft|revision)\.(?P<number>\d{1,3})[-.]", re.IGNORECASE)
++_CHAPTER_IN_PATH = re.compile(r"chapter\.(?:draft|revision|revise)\.(?P<number>\d{1,3})[-.]", re.IGNORECASE)
+ _ACCEPTED_PATH = re.compile(r"chapter-(?P<number>\d{3})\.md$")
+ _MAX_BATCH = 10
+ 
+diff --git a/src/kdp_pipeline/cli/app.py b/src/kdp_pipeline/cli/app.py
+index 86d73ef..0ac5e31 100644
+--- a/src/kdp_pipeline/cli/app.py
++++ b/src/kdp_pipeline/cli/app.py
+@@ -840,9 +840,12 @@ def chapter_revise(title_id: str, chapter_number: int, asset_id: str = typer.Opt
+ 
+ 
+ @chapter_app.command("accept")
+-def chapter_accept(title_id: str, chapter_number: int, asset_id: str = typer.Option(...), reviewer: str = typer.Option(...), root: Path | None = typer.Option(None)):
++def chapter_accept(title_id: str, chapter_number: int, asset_id: str = typer.Option(...), reviewer: str = typer.Option(...),
++                   supersede_reason: str | None = typer.Option(None, help="Explicitly replace the accepted chapter; the old version is archived"),
++                   root: Path | None = typer.Option(None)):
+     try:
+-        result = accept_chapter(_root(root), asset_id, chapter_number=chapter_number, reviewer=reviewer)
++        result = accept_chapter(_root(root), asset_id, chapter_number=chapter_number, reviewer=reviewer,
++                                supersede=supersede_reason is not None, supersede_reason=supersede_reason)
+     except (OSError, ValueError) as e:
+         typer.echo(f"Error: {e}", err=True)
+         raise typer.Exit(code=2)
+@@ -996,6 +999,17 @@ def inspect_lifecycle(title_id: str, root: Path | None = typer.Option(None)):
+         raise typer.Exit(code=2)
+ 
+ 
++@app.command("relocate")
++def relocate(old_root: str = typer.Option(..., "--from", help="Absolute root the database was created under"),
++             dry_run: bool = typer.Option(False, "--dry-run"), root: Path | None = typer.Option(None)):
++    """Rebase stored absolute paths after a restore to a new location; verifies every hash first."""
++    from kdp_pipeline.storage.relocate import relocate_workspace
++    result = relocate_workspace(_root(root), old_root, dry_run=dry_run)
++    typer.echo(json.dumps(result, indent=2))
++    if result["verification_failures"]:
++        raise typer.Exit(code=2)
++
++
+ @app.command("doctor")
+ def doctor(root: Path | None = typer.Option(None)):
+     for check in run_doctor(_root(root)):
+diff --git a/src/kdp_pipeline/continuity/service.py b/src/kdp_pipeline/continuity/service.py
+index aa1bc65..56d9ee5 100644
+--- a/src/kdp_pipeline/continuity/service.py
++++ b/src/kdp_pipeline/continuity/service.py
+@@ -138,14 +138,21 @@ def _validate_output(text: str) -> dict:
+         r"\b(required )?(chapter|draft|context|positioning|book brief|outline|chapter card|canon baseline)\b",
+         folded, re.DOTALL,
+     )
+-    if requests_missing_context or declares_missing_context or any(phrase in folded for phrase in (
++    explicit_refusal = any(phrase in folded for phrase in (
+         "i don't have the chapter", "i do not have the chapter", "send the materials", "context is missing",
+-    )):
+-        raise ContinuityOutputInvalid("continuity output says required context is missing")
++    ))
+     try:
+         value = json.loads(stripped)
+     except json.JSONDecodeError as exc:
++        if requests_missing_context or declares_missing_context or explicit_refusal:
++            raise ContinuityOutputInvalid("continuity output says required context is missing") from exc
+         raise ContinuityOutputInvalid("continuity output is not valid JSON") from exc
++    # Inside a valid JSON contract, words like "missing ... outline" are usually genuine findings
++    # ("the draft is missing the outline's second beat"); only explicit requests for materials,
++    # or a refusal, invalidate the analysis (KDP-AUD-011).
++    if explicit_refusal or (requests_missing_context and not (isinstance(value, dict)
++                                                              and value.get("supplied_context_confirmed") is True)):
++        raise ContinuityOutputInvalid("continuity output says required context is missing")
+     if not isinstance(value, dict):
+         raise ContinuityOutputInvalid("continuity output must be a JSON object")
+     missing = [key for key in REQUIRED_FIELDS if key not in value or not isinstance(value[key], REQUIRED_FIELDS[key])]
+diff --git a/src/kdp_pipeline/editorial/service.py b/src/kdp_pipeline/editorial/service.py
+index a7cf8e3..95f607c 100644
+--- a/src/kdp_pipeline/editorial/service.py
++++ b/src/kdp_pipeline/editorial/service.py
+@@ -38,7 +38,7 @@ class StructuredEditorialRunResult:
+ 
+ STRUCTURED_PASSES = {"voice", "line", "copy", "reader-experience", "consistency"}
+ _MISSING_CONTEXT = re.compile(r"(resend|provide|supply|need).{0,50}(chapter|draft|context|card|brief|outline)|\bno (chapter|draft|context) (text|was|provided|available)", re.I | re.S)
+-_CHAPTER_SOURCE_NUMBER = re.compile(r"chapter\.(?:draft|revision)\.(?P<number>\d+)-", re.I)
++_CHAPTER_SOURCE_NUMBER = re.compile(r"chapter\.(?:draft|revision|revise)\.(?P<number>\d+)-", re.I)
+ 
+ 
+ def _parse_structured_output(text: str) -> StructuredEditorialOutput:
+@@ -95,7 +95,7 @@ class StructuredEditorialService:
+             manifest, chapter_context = _chapter_authoring_context(session, title_id, chapter_number, manifest)
+             variables = {"title_id": title_id, "working_title": title.working_title,
+                          "chapter_number": str(chapter_number), "chapter_context": chapter_context}
+-        prompt = PromptRegistry(root / "prompts").render(f"editorial/{pass_type}", variables)
++        prompt = PromptRegistry(root / "prompts").render(f"editorial/{pass_type}", variables, template_version="1.0")
+         generation = await GenerationService.generate(root, title_id=title_id,
+             task_type=f"chapter.editorial.{pass_type}.{chapter_number}", rendered_prompt=prompt,
+             context_manifest=manifest, provider=provider,
+@@ -185,11 +185,20 @@ class EditorialService:
+                 raise ValueError("Unknown title or source chapter asset")
+             if title.status != "DRAFTING":
+                 raise ValueError("Developmental editing requires DRAFTING state")
+-            if source.approval_status != "experimental":
++            if source.approval_status != "experimental" or source.asset_type not in {"chapter.draft", "chapter.revision"}:
+                 raise ValueError("Developmental editing requires an experimental chapter asset")
+-            manifest = _planning_context(session, title_id, source, chapter_number)
+-            title_values = {"title_id": title_id, "working_title": title.working_title, "chapter_number": str(chapter_number)}
+-        prompt = PromptRegistry(root / "prompts").render("editorial/developmental", title_values)
++            card = _accepted_chapter_card(session, title_id, chapter_number)
++            if card is None:
++                raise ValueError(f"Accepted chapter card not found for chapter {chapter_number}")
++            base = _planning_context(session, title_id, card, chapter_number)
++            manifest = ContextManifest(title_id=title_id, task_type=f"editorial.developmental.{chapter_number}",
++                inputs=base.inputs + [ContextInput(input_ref=source.asset_id, sha256=source.sha256,
++                                                   context_tier="A", role="target_chapter_draft")])
++            # The manifest must describe exactly what is sent (KDP-AUD-005): render the same inputs.
++            manifest, chapter_context = _chapter_authoring_context(session, title_id, chapter_number, manifest)
++            title_values = {"title_id": title_id, "working_title": title.working_title,
++                            "chapter_number": str(chapter_number), "chapter_context": chapter_context}
++        prompt = PromptRegistry(root / "prompts").render("editorial/developmental", title_values, template_version="1.1")
+         generation = await GenerationService.generate(
+             root, title_id=title_id, task_type=f"chapter.editorial.developmental.{chapter_number}",
+             rendered_prompt=prompt, context_manifest=manifest, provider=provider,
+diff --git a/src/kdp_pipeline/generation/service.py b/src/kdp_pipeline/generation/service.py
+index e1c4edd..bb5129e 100644
+--- a/src/kdp_pipeline/generation/service.py
++++ b/src/kdp_pipeline/generation/service.py
+@@ -275,6 +275,37 @@ def _reject_empty_output(root: Path, job_id: str, diagnostics: dict[str, Any]) -
+         session.commit()
+ 
+ 
++_INCOMPLETE_FINISH_REASONS = {"length", "content_filter", "max_tokens", "incomplete"}
++
++
++def _unusable_completion(diagnostics: dict[str, Any]) -> str | None:
++    """Truncated, filtered or refused completions must never become assets (KDP-AUD-010)."""
++    reason = diagnostics.get("finish_reason")
++    if reason in _INCOMPLETE_FINISH_REASONS:
++        return f"provider output is incomplete (finish_reason={reason})"
++    if diagnostics.get("incomplete_reason"):
++        return f"provider output is incomplete ({diagnostics['incomplete_reason']})"
++    if diagnostics.get("refusal_present"):
++        return "provider refused the request"
++    return None
++
++
++def _reject_unusable_output(root: Path, job_id: str, reason: str, diagnostics: dict[str, Any]) -> None:
++    with session_scope(root) as session:
++        job = session.get(JobRow, job_id)
++        if job is None:
++            return
++        job.status = "failed"
++        job.error = f"Generation rejected: {reason}"
++        job.completed_at = utcnow()
++        AuditEventWriter.append(
++            session, actor_id="system", action="generation.unusable_output_rejected",
++            entity_type="job", entity_id=job_id, correlation_id=job_id, result="failed",
++            metadata={"reason": reason, "response_diagnostics": diagnostics, "usage_preserved": True},
++        )
++        session.commit()
++
++
+ class GenerationService:
+     @staticmethod
+     async def generate(
+@@ -340,6 +371,13 @@ class GenerationService:
+             if title is None:
+                 raise ValueError(f"Unknown title: {title_id}")
+             existing = session.scalar(select(JobRow).where(JobRow.idempotency_key == idempotency_key))
++            if existing is not None and existing.status == "failed":
++                # An operator-initiated re-run after a recorded failure is a new, separately budgeted
++                # and audited attempt; nothing here retries automatically (KDP-AUD-013).
++                prior = session.scalars(select(JobRow.idempotency_key).where(
++                    JobRow.idempotency_key.like(f"{idempotency_key}%"))).all()
++                idempotency_key = f"{idempotency_key}:attempt-{len(prior) + 1}"
++                existing = session.scalar(select(JobRow).where(JobRow.idempotency_key == idempotency_key))
+             if existing is not None:
+                 if existing.status == "success":
+                     existing_job = existing
+@@ -508,6 +546,10 @@ class GenerationService:
+         if not generation_result.text.strip():
+             _reject_empty_output(root, job.job_id, response_diagnostics)
+             raise GenerationServiceError("Generation rejected: provider output was empty or whitespace-only")
++        unusable = _unusable_completion(response_diagnostics)
++        if unusable:
++            _reject_unusable_output(root, job.job_id, unusable, response_diagnostics)
++            raise GenerationServiceError(f"Generation rejected: {unusable}")
+ 
+         output_path: Path | None = None
+         try:
+@@ -555,6 +597,7 @@ class GenerationService:
+                     output_hash=output_hash,
+                     generation_timestamp=utcnow(),
+                     ai_classification="AI_GENERATED",
++                    prompt_template_sha256=rendered_prompt.template_sha256,
+                 )
+                 session.add(asset)
+                 session.add(provenance_row)
+diff --git a/src/kdp_pipeline/inspection/service.py b/src/kdp_pipeline/inspection/service.py
+index 288921b..7c6cca9 100644
+--- a/src/kdp_pipeline/inspection/service.py
++++ b/src/kdp_pipeline/inspection/service.py
+@@ -8,9 +8,8 @@ from datetime import datetime, timezone
+ from contextlib import contextmanager
+ from pathlib import Path
+ 
+-from sqlalchemy import create_engine, inspect as sqlalchemy_inspect, or_, select, text
++from sqlalchemy import inspect as sqlalchemy_inspect, or_, select, text
+ from sqlalchemy.orm import Session
+-from sqlalchemy.pool import NullPool
+ 
+ from kdp_pipeline.models.planning import PlanningArtifactKind, spec_for
+ from kdp_pipeline.continuity.service import ContinuityOutputInvalid, _validate_output
+@@ -53,7 +52,8 @@ def _read_only_session(root: Path):
+     db_path = root / ".kdp" / "state.db"
+     if not db_path.is_file():
+         raise FileNotFoundError(f"SQLite database does not exist: {db_path}")
+-    engine = create_engine(f"sqlite:///{db_path}", future=True, poolclass=NullPool)
++    from kdp_pipeline.storage.db import sqlite_engine
++    engine = sqlite_engine(db_path)
+     try:
+         with Session(engine, expire_on_commit=False) as session:
+             yield session
+@@ -226,7 +226,7 @@ def inspect_title(root: Path, title_id: str) -> dict:
+         for asset in assets:
+             name = Path(asset.path).name
+             match = (re.search(r"chapter-(\d{3})\.md$", name) if asset.asset_type in {"chapter.accepted", "planning.chapter-card"}
+-                     else re.search(r"chapter\.(?:draft|revision)\.(\d+)[-.]", name) if asset.asset_type in {"chapter.draft", "chapter.revision"} else None)
++                     else re.search(r"chapter\.(?:draft|revision|revise)\.(\d+)[-.]", name) if asset.asset_type in {"chapter.draft", "chapter.revision"} else None)
+             if match:
+                 chapter_numbers.add(int(match.group(1)))
+         queue_rows = (list(session.scalars(select(ChapterQueueRow).where(ChapterQueueRow.title_id == title_id)))
+@@ -238,7 +238,7 @@ def inspect_title(root: Path, title_id: str) -> dict:
+                            and re.search(rf"chapter-{number:03d}\.md$", Path(a.path).name) for a in assets)
+             accepted_for_number = any(re.search(rf"chapter-{number:03d}\.md$", Path(a.path).name) for a in accepted_chapters)
+             drafts_for_number = [a.asset_id for a in experimental_chapters
+-                                 if re.search(rf"chapter\.(?:draft|revision)\.{number}[-.]", Path(a.path).name)]
++                                 if re.search(rf"chapter\.(?:draft|revision|revise)\.{number}[-.]", Path(a.path).name)]
+             queued = queue_by_number.get(number)
+             failed_job = any(j.status == "failed" and j.job_type.endswith(f".{number}")
+                              and j.job_type.startswith(("generate:chapter.draft.", "generate:chapter.revise.")) for j in jobs)
+@@ -537,9 +537,43 @@ def doctor(root: Path) -> list[dict[str, str]]:
+                         message += "; unpriced usage exists"
+                     add(status, f"budget:{budget.project_id}", message,
+                         "Review project budget, pricing, and usage before continuing generation.")
++            triggers = {row[0] for row in session.execute(text(
++                "SELECT name FROM sqlite_master WHERE type='trigger' AND tbl_name='audit_events'"))}
++            add("OK" if {"audit_events_no_update", "audit_events_no_delete"} <= triggers else "FAIL",
++                "audit.append_only", "append-only triggers present" if len(triggers) >= 2 else "audit_events can be updated or deleted",
++                "Open the database with the current release so init_db installs the append-only triggers.")
++            outside = sum(not Path(asset.path).resolve().is_relative_to(root.resolve())
++                          for asset in session.scalars(select(AssetRow)))
++            if outside:
++                add("FAIL", "paths.relocation", f"{outside} asset path(s) point outside this workspace root",
++                    "If this is a restored copy, run `kdp relocate --from <old root>`; it verifies every hash before committing.")
++            for build in session.scalars(select(ManuscriptBuildRow)):
++                manifest = Path(build.manifest_path)
++                if not manifest.is_file() or sha256_file(manifest) != build.manifest_sha256:
++                    add("FAIL", f"build-manifest:{build.build_id}", "manifest missing or hash mismatch",
++                        "Do not release from this build; rebuild from accepted chapters.")
++            for approval in session.scalars(select(ApprovalRow).where(ApprovalRow.asset_id.is_not(None),
++                                                                      ApprovalRow.decision == "accepted")):
++                approved = session.get(AssetRow, approval.asset_id)
++                if approved is not None and approved.approval_status == "accepted" and approval.candidate_hash != approved.sha256:
++                    add("FAIL", f"approval:{approval.approval_id}", "approved hash does not match the accepted asset",
++                        "Treat the acceptance as invalid until a human re-reviews the asset.")
+             for title in titles:
+                 project = session.get(ProjectRow, title.project_id)
+                 workspace = root / "projects" / (project.project_id if project else "missing") / "titles" / title.title_id
++                for relative, key in (("continuity-ledger.json", None), ("entities.json", "entities"), ("unresolved.json", "unresolved")):
++                    canon_file = workspace / "06_canon" / relative
++                    if not canon_file.is_file():
++                        continue
++                    try:
++                        value = json.loads(canon_file.read_text(encoding="utf-8"))
++                    except (UnicodeDecodeError, json.JSONDecodeError):
++                        value = {"unreadable": True}
++                    if any(value.values()) if isinstance(value, dict) else bool(value):
++                        # There is no canon-apply workflow, so any non-empty canon file was edited outside
++                        # an approved CanonProposal (KDP-AUD-012).
++                        add("FAIL", f"canon:{title.title_id}:{relative}", "canon file changed outside the CanonProposal workflow",
++                            "Restore the canon file or record the change through an approved proposal; continuity analysis reads it.")
+                 add("OK" if workspace.is_dir() else "FAIL", f"workspace:{title.title_id}", "present" if workspace.is_dir() else "missing", "Restore the title workspace or stop the pilot.")
+                 for asset in session.scalars(select(AssetRow).where(AssetRow.title_id == title.title_id)):
+                     path = Path(asset.path)
+diff --git a/src/kdp_pipeline/planning/service.py b/src/kdp_pipeline/planning/service.py
+index 52539f6..3cf32cd 100644
+--- a/src/kdp_pipeline/planning/service.py
++++ b/src/kdp_pipeline/planning/service.py
+@@ -3,7 +3,9 @@ from __future__ import annotations
+ from pathlib import Path
+ from typing import Any
+ 
+-from kdp_pipeline.context import ContextManifest
++from sqlalchemy import select
++
++from kdp_pipeline.context import ContextInput, ContextManifest
+ from kdp_pipeline.generation import GenerationRunResult, GenerationService
+ from kdp_pipeline.models.planning import PlanningArtifactKind, spec_for
+ from kdp_pipeline.prompts import PromptRegistry
+@@ -13,6 +15,40 @@ from kdp_pipeline.storage.files import sha256_file
+ from kdp_pipeline.storage.service import session_scope
+ 
+ 
++_PLANNING_ORDER = (PlanningArtifactKind.POSITIONING, PlanningArtifactKind.BOOK_BRIEF,
++                   PlanningArtifactKind.OUTLINE, PlanningArtifactKind.CHAPTER_CARD)
++
++
++def _accepted_planning_context(session, title_id: str, kind: PlanningArtifactKind,
++                               manifest: ContextManifest) -> tuple[ContextManifest, str]:
++    """Send the accepted upstream artefacts to the model and record them in the manifest (KDP-AUD-006).
++
++    Upstream = the operator idea note, the accepted concept brief, and every accepted planning
++    artefact earlier in the chain than ``kind`` (a chapter card also receives the outline).
++    Files are integrity-checked; a mismatch fails the request instead of silently dropping context.
++    """
++    wanted = ["concept.idea-note", "concept.brief"] + [
++        spec_for(k).asset_type for k in _PLANNING_ORDER[:_PLANNING_ORDER.index(kind)]]
++    inputs, sections = list(manifest.inputs), []
++    for asset_type in wanted:
++        query = select(AssetRow).where(AssetRow.title_id == title_id, AssetRow.asset_type == asset_type)
++        if asset_type != "concept.idea-note":
++            query = query.where(AssetRow.approval_status == "accepted")
++        asset = session.scalar(query.order_by(AssetRow.created_at.desc()))
++        if asset is None:
++            continue
++        if asset_type != "concept.idea-note" and session.scalar(select(ApprovalRow).where(
++                ApprovalRow.asset_id == asset.asset_id, ApprovalRow.decision == "accepted")) is None:
++            continue
++        path = Path(asset.path)
++        if not path.is_file() or sha256_file(path) != asset.sha256:
++            raise ValueError(f"Planning context file/hash integrity check failed: {asset.asset_id}")
++        inputs.append(ContextInput(input_ref=asset.asset_id, sha256=asset.sha256, context_tier="A", role=asset_type))
++        sections.append(f"## {asset_type} (asset {asset.asset_id})\n{path.read_text(encoding='utf-8')}")
++    text = "\n\n".join(sections) if sections else "No accepted upstream context exists yet."
++    return ContextManifest(title_id=manifest.title_id, task_type=manifest.task_type, inputs=inputs), text
++
++
+ class PlanningService:
+     @staticmethod
+     async def generate(
+@@ -58,10 +94,14 @@ class PlanningService:
+                 "chapter_number": str(chapter_number or ""),
+             }
+ 
++            context_manifest, planning_context = _accepted_planning_context(
++                session, title_id, artifact_kind, context_manifest)
++
+         spec = spec_for(artifact_kind)
+         prompt = PromptRegistry(root / "prompts").render(
+             spec.template_id,
+-            {**title_values, **(variables or {})},
++            {**title_values, "planning_context": planning_context, **(variables or {})},
++            template_version="1.1",
+         )
+         task_type = f"planning.{artifact_kind.value}"
+         if chapter_number is not None:
+diff --git a/src/kdp_pipeline/prompts/registry.py b/src/kdp_pipeline/prompts/registry.py
+index eb7b29c..1d6187e 100644
+--- a/src/kdp_pipeline/prompts/registry.py
++++ b/src/kdp_pipeline/prompts/registry.py
+@@ -46,6 +46,8 @@ class PromptRegistry:
+ 
+         templates: dict[tuple[str, str], PromptTemplate] = {}
+         for path in sorted(self.prompts_root.rglob("*.md")):
++            if path.name.upper() == "README.MD" or path.name.startswith("_"):
++                continue  # documentation beside prompts must not disable every generation path (KDP-AUD-030)
+             match = _VERSIONED_NAME.match(path.name)
+             if not match:
+                 raise PromptRegistryError(
+@@ -108,4 +110,5 @@ class PromptRegistry:
+             template_version=template.template_version,
+             rendered_text=rendered,
+             rendered_sha256=sha256_text(rendered),
++            template_sha256=sha256_text(template.source_text),
+         )
+diff --git a/src/kdp_pipeline/providers/contracts.py b/src/kdp_pipeline/providers/contracts.py
+index 859e57f..7f3f239 100644
+--- a/src/kdp_pipeline/providers/contracts.py
++++ b/src/kdp_pipeline/providers/contracts.py
+@@ -16,6 +16,7 @@ class RenderedPrompt(BaseModel):
+     template_version: str
+     rendered_text: str
+     rendered_sha256: str
++    template_sha256: str | None = None  # hash of the template file as read (KDP-AUD-029)
+ 
+     @model_validator(mode="after")
+     def validate_hash(self) -> "RenderedPrompt":
+diff --git a/src/kdp_pipeline/providers/costs.py b/src/kdp_pipeline/providers/costs.py
+index 70eb361..3308f41 100644
+--- a/src/kdp_pipeline/providers/costs.py
++++ b/src/kdp_pipeline/providers/costs.py
+@@ -111,13 +111,9 @@ def calculate_usage_cost(usage, pricing: ModelPricingRow | None) -> dict[str, An
+     currency = usage.currency
+     source = "unknown"
+     cost_details: dict[str, Any] = {"basis": "unknown", "reason": "no provider cost or configured pricing"}
+-    if usage.reported_cost is not None:
+-        cost, source = usage.reported_cost, "provider_reported"
+-        cost_details = {"basis": "provider_reported"}
+-    elif usage.estimated_cost is not None:
+-        cost, source = usage.estimated_cost, "estimated"
+-        cost_details = {"basis": "provider_estimate"}
+-    elif (pricing is not None and input_tokens is not None and output_tokens is not None):
++    # Configured operator rates are authoritative when they exist. A provider-reported cost is
++    # recorded as a detail and only raises the figure, never lowers it (KDP-AUD-007).
++    if (pricing is not None and input_tokens is not None and output_tokens is not None):
+         cached = min(cached_tokens or 0, input_tokens)
+         uncached = input_tokens - cached
+         cached_rate = (pricing.cached_input_usd_per_million
+@@ -133,6 +129,16 @@ def calculate_usage_cost(usage, pricing: ModelPricingRow | None) -> dict[str, An
+                         "output_usd_per_million": pricing.output_usd_per_million,
+                         "cached_input_usd_per_million": pricing.cached_input_usd_per_million,
+                         "currency": pricing.currency, "pricing_updated_at": pricing.updated_at.isoformat()}
++        if usage.reported_cost is not None:
++            cost_details["provider_reported_cost"] = usage.reported_cost
++            if usage.reported_cost > cost:
++                cost, cost_details["basis"] = usage.reported_cost, "provider_reported_higher_than_rates"
++    elif usage.reported_cost is not None:
++        cost, source = usage.reported_cost, "provider_reported"
++        cost_details = {"basis": "provider_reported"}
++    elif usage.estimated_cost is not None:
++        cost, source = usage.estimated_cost, "estimated"
++        cost_details = {"basis": "provider_estimate"}
+     if currency is None and (source == "estimated" or source == "provider_reported"):
+         currency = pricing.currency if pricing is not None else "USD"
+     if cost is not None and (not isfinite(float(cost)) or cost < 0):
+diff --git a/src/kdp_pipeline/providers/openai_compatible.py b/src/kdp_pipeline/providers/openai_compatible.py
+index a0341fe..c47c08c 100644
+--- a/src/kdp_pipeline/providers/openai_compatible.py
++++ b/src/kdp_pipeline/providers/openai_compatible.py
+@@ -47,6 +47,23 @@ class ProviderResponseError(OpenAICompatibleProviderError):
+     pass
+ 
+ 
++MAX_RESPONSE_BYTES = 4 * 1024 * 1024  # KDP-AUD-023: a chapter response is kilobytes, never megabytes
++
++
++def _usage_int(value: object) -> int | None:
++    """Accept only non-negative integers (or integral strings); anything else is recorded as unknown.
++
++    A malformed usage block must never turn a billed 200 response into an exception that
++    loses the usage record (KDP-AUD-022)."""
++    if isinstance(value, bool):
++        return None
++    if isinstance(value, str) and value.isdecimal():
++        value = int(value)
++    if isinstance(value, float) and value.is_integer():
++        value = int(value)
++    return value if isinstance(value, int) and 0 <= value < 10**12 else None
++
++
+ class OpenAICompatibleConfig(BaseModel):
+     base_url: str = "https://api.openai.com/v1"
+     model: str = Field(min_length=1)
+@@ -191,11 +208,19 @@ class OpenAICompatibleProvider:
+         started = time.perf_counter()
+         try:
+             try:
+-                response = await client.post(
+-                    f"{self.config.base_url}/chat/completions",
+-                    headers=headers,
+-                    json=payload,
+-                )
++                async with client.stream("POST", f"{self.config.base_url}/chat/completions",
++                                         headers=headers, json=payload) as streamed:
++                    declared = streamed.headers.get("content-length")
++                    if declared and declared.isdigit() and int(declared) > MAX_RESPONSE_BYTES:
++                        raise ProviderResponseError("Provider response exceeds the maximum accepted size")
++                    chunks, received = [], 0
++                    async for chunk in streamed.aiter_bytes():
++                        received += len(chunk)
++                        if received > MAX_RESPONSE_BYTES:
++                            raise ProviderResponseError("Provider response exceeds the maximum accepted size")
++                        chunks.append(chunk)
++                    response = httpx.Response(streamed.status_code, headers=streamed.headers,
++                                              content=b"".join(chunks), request=streamed.request)
+             except httpx.HTTPError as exc:
+                 raise ProviderTransportError(
+                     f"OpenAI-compatible provider transport failure: {type(exc).__name__}"
+@@ -264,16 +289,17 @@ class OpenAICompatibleProvider:
+                 ),
+             }
+             diagnostics = {key: value for key, value in diagnostics.items() if value is not None}
++            reported_cost = usage.get("cost") if isinstance(usage, dict) else None
++            reported_cost = (float(reported_cost) if isinstance(reported_cost, (int, float))
++                             and not isinstance(reported_cost, bool) and 0 <= reported_cost < 1e6 else None)
+             usage_metadata = UsageMetadata(
+-                input_tokens=usage.get("prompt_tokens") if isinstance(usage, dict) else None,
+-                output_tokens=usage.get("completion_tokens") if isinstance(usage, dict) else None,
+-                total_tokens=usage.get("total_tokens") if isinstance(usage, dict) else None,
+-                cached_input_tokens=(usage.get("prompt_tokens_details", {}).get("cached_tokens")
+-                                     if isinstance(usage, dict) and isinstance(usage.get("prompt_tokens_details"), dict)
+-                                     else None),
+-                reported_cost=(usage.get("cost") if isinstance(usage, dict)
+-                               and isinstance(usage.get("cost"), (int, float)) else None),
+-                currency="USD" if isinstance(usage, dict) and isinstance(usage.get("cost"), (int, float)) else None,
++                input_tokens=_usage_int(usage.get("prompt_tokens")),
++                output_tokens=_usage_int(usage.get("completion_tokens")),
++                total_tokens=_usage_int(usage.get("total_tokens")),
++                cached_input_tokens=(_usage_int(usage.get("prompt_tokens_details", {}).get("cached_tokens"))
++                                     if isinstance(usage.get("prompt_tokens_details"), dict) else None),
++                reported_cost=reported_cost,
++                currency="USD" if reported_cost is not None else None,
+             ) if isinstance(usage, dict) else None
+ 
+             response_id = body.get("id") if isinstance(body, dict) else None
+diff --git a/src/kdp_pipeline/providers/settings.py b/src/kdp_pipeline/providers/settings.py
+index dfd5f99..0d6f934 100644
+--- a/src/kdp_pipeline/providers/settings.py
++++ b/src/kdp_pipeline/providers/settings.py
+@@ -5,8 +5,25 @@ import ipaddress
+ from typing import Any, Literal
+ from urllib.parse import urlparse
+ 
++import os
++
+ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+ 
++# A profile must not be able to turn an unrelated secret (cloud, VCS, database, SSH, the app's own
++# settings) into a bearer token for an arbitrary host (KDP-AUD-009).
++_ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
++_FORBIDDEN_ENV = re.compile(
++    r"^(?:AWS_|AZURE_|GOOGLE_|GCP_|GCLOUD|GITHUB_|GH_|GITLAB_|CI_|ACTIONS_|DOCKER|KUBE|SSH_|NPM_|PYPI_|TWINE_|"
++    r"DATABASE|PG|MYSQL|REDIS|SLACK_|STRIPE_|TAILSCALE|SECRET_KEY$|DJANGO_|FLASK_)|PASSWORD|PASSWD|SESSION",
++    re.IGNORECASE)
++_DEFAULT_PROVIDER_HOSTS = {"api.openai.com"}
++
++
++def allowed_provider_hosts() -> set[str]:
++    """Remote provider hosts the operator has allowed; loopback is always allowed."""
++    extra = os.getenv("KDP_PROVIDER_HOST_ALLOWLIST", "")
++    return _DEFAULT_PROVIDER_HOSTS | {host.strip().lower() for host in extra.split(",") if host.strip()}
++
+ 
+ class ProviderProfileSettings(BaseModel):
+     """Non-secret provider configuration suitable for SQLite and future UI DTOs."""
+@@ -41,8 +58,8 @@ class ProviderProfileSettings(BaseModel):
+     @field_validator("api_key_env")
+     @classmethod
+     def validate_api_key_env(cls, value: str | None) -> str | None:
+-        if value is not None and not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", value):
+-            raise ValueError("api_key_env must be an environment variable name")
++        if value is not None and (not _ENV_NAME.fullmatch(value) or _FORBIDDEN_ENV.search(value)):
++            raise ValueError("api_key_env must name a dedicated provider key variable, not a cloud/VCS/database/app secret")
+         return value
+ 
+     @field_validator("base_url")
+@@ -56,8 +73,11 @@ class ProviderProfileSettings(BaseModel):
+             raise ValueError("base_url must be an absolute HTTP(S) URL without credentials")
+         if parsed.query or parsed.fragment:
+             raise ValueError("base_url must not contain a query string or fragment")
+-        if parsed.scheme == "http" and parsed.hostname not in {"localhost", "127.0.0.1", "::1"}:
++        loopback = parsed.hostname in {"localhost", "127.0.0.1", "::1"}
++        if parsed.scheme == "http" and not loopback:
+             raise ValueError("HTTP is allowed only for loopback provider endpoints")
++        if not loopback and parsed.hostname.lower() not in allowed_provider_hosts():
++            raise ValueError("Provider host is not in KDP_PROVIDER_HOST_ALLOWLIST; add it deliberately before use")
+         return value
+ 
+     @model_validator(mode="after")
+diff --git a/src/kdp_pipeline/release/service.py b/src/kdp_pipeline/release/service.py
+index 388c31e..2dbee22 100644
+--- a/src/kdp_pipeline/release/service.py
++++ b/src/kdp_pipeline/release/service.py
+@@ -26,6 +26,9 @@ _DOMAINS = {"metadata": set(METADATA_CHECKS), "kdp": set(KDP_CHECKS),
+ _CHECK_DECISIONS = {"complete", "not_applicable"}
+ _REVIEW_DECISIONS = {"approve", "hold", "reject"}
+ _MANUAL_PUBLICATION_CONDITION = "KDP upload and publication remain manual human-controlled actions."
++# A release cannot be approved while the title is held or already past submission (KDP-AUD-015).
++_NON_RELEASABLE_STATES = {"RIGHTS_HOLD", "POLICY_HOLD", "KDP_EXCEPTION", "HUMAN_SUBMITTED", "IN_REVIEW",
++                          "LIVE", "MONITORING", "UPDATE_ASSESSMENT"}
+ 
+ 
+ def _blocker_identity(blocker: dict) -> tuple:
+@@ -195,7 +198,9 @@ def create_release_candidate(root: Path, *, title_id: str, build_id: str,
+                 "ai_classification": provenance.ai_classification if provenance else None,
+                 "disclosure_decision": provenance.disclosure_decision if provenance else None})
+         ai_summary = {"assets": provenance_summary,
+-            "ai_asset_count": sum(item["creator_type"] == "ai" for item in provenance_summary),
++            "ai_asset_count": sum(item["creator_type"] in {"ai", "ai+human"}
++                                  or str(item["ai_classification"] or "").upper().startswith("AI_GENERATED")
++                                  for item in provenance_summary),
+             "status": "pending_human_disclosure"}
+         metadata_checks = {key: {"status": "pending", "evidence_reference": None,
+                                  "rationale": None, "reviewer": None, "value": None}
+@@ -299,6 +304,19 @@ def review_release_candidate(root: Path, candidate_id: str, *, decision: str,
+         if row.status in {"approved_for_manual_kdp_action", "rejected"}:
+             raise ValueError("Release candidate has already reached a terminal review state")
+         blockers = _blockers(session, row)
++        if decision == "approve":
++            title = session.get(TitleRow, row.title_id)
++            if title is not None and title.status in _NON_RELEASABLE_STATES:
++                blockers = blockers + [{"type": "title_state", "status": title.status}]
++            preparers = {row.created_by.strip().casefold()} | {
++                (json.loads(value) or {}).get("reviewer", "").strip().casefold()
++                for value in [row.ai_disclosure_json] if value} | {
++                (check or {}).get("reviewer", "").strip().casefold()
++                for column in (row.metadata_checks_json, row.kdp_checks_json)
++                for check in json.loads(column or "{}").values()}
++            if reviewer.strip().casefold() in preparers - {""}:
++                blockers = blockers + [{"type": "segregation_of_duties",
++                                        "detail": "approver prepared or checked this candidate"}]
+         if decision == "approve" and blockers:
+             row.status = "blocked"
+             AuditEventWriter.append(session, actor_id=reviewer.strip(), action="release.candidate.approval_blocked",
+diff --git a/src/kdp_pipeline/storage/db.py b/src/kdp_pipeline/storage/db.py
+index 1a4dd4f..fc08ace 100644
+--- a/src/kdp_pipeline/storage/db.py
++++ b/src/kdp_pipeline/storage/db.py
+@@ -13,6 +13,7 @@ from sqlalchemy import (
+     Text,
+     UniqueConstraint,
+     create_engine,
++    event,
+     inspect as sqlalchemy_inspect,
+     text,
+ )
+@@ -103,6 +104,8 @@ class ProvenanceRow(Base):
+     ai_classification: Mapped[str | None] = mapped_column(String, nullable=True)
+     disclosure_decision: Mapped[str | None] = mapped_column(String, nullable=True)
+     reviewer: Mapped[str | None] = mapped_column(String, nullable=True)
++    # SHA-256 of the prompt template file as read at render time (KDP-AUD-029).
++    prompt_template_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+ 
+ 
+ class ApprovalRow(Base):
+@@ -381,14 +384,45 @@ def utcnow() -> datetime:
+     return datetime.now(timezone.utc)
+ 
+ 
++SCHEMA_VERSION = 2
++_AUDIT_APPEND_ONLY_TRIGGERS = (
++    "CREATE TRIGGER IF NOT EXISTS audit_events_no_update BEFORE UPDATE ON audit_events "
++    "BEGIN SELECT RAISE(ABORT, 'audit_events is append-only'); END",
++    "CREATE TRIGGER IF NOT EXISTS audit_events_no_delete BEFORE DELETE ON audit_events "
++    "BEGIN SELECT RAISE(ABORT, 'audit_events is append-only'); END",
++)
++
++
++def configure_sqlite_connection(dbapi_connection, _record=None) -> None:
++    """Per-connection pragmas: enforce declared foreign keys and wait for writers (KDP-AUD-042)."""
++    # Let SQLAlchemy emit BEGIN itself (documented pysqlite pattern) so per-transaction pragmas hold.
++    dbapi_connection.isolation_level = None
++    cursor = dbapi_connection.cursor()
++    try:
++        cursor.execute("PRAGMA foreign_keys=ON")
++        cursor.execute("PRAGMA busy_timeout=15000")
++    finally:
++        cursor.close()
++
++
++def _defer_foreign_keys(connection) -> None:
++    # The ORM flushes rows without relationship() ordering (e.g. approvals before assets), so
++    # constraints are checked at COMMIT rather than per statement; they are still enforced.
++    connection.exec_driver_sql("BEGIN")
++    connection.exec_driver_sql("PRAGMA defer_foreign_keys=ON")
++
++
++def sqlite_engine(db_path: Path):
++    engine = create_engine(f"sqlite:///{db_path}", future=True, poolclass=NullPool)
++    event.listen(engine, "connect", configure_sqlite_connection)
++    event.listen(engine, "begin", _defer_foreign_keys)
++    return engine
++
++
+ def engine_for(root: Path):
+     state_dir = root / ".kdp"
+     state_dir.mkdir(parents=True, exist_ok=True)
+-    return create_engine(
+-        f"sqlite:///{state_dir / 'state.db'}",
+-        future=True,
+-        poolclass=NullPool,
+-    )
++    return sqlite_engine(state_dir / "state.db")
+ 
+ 
+ def init_db(root: Path) -> None:
+@@ -405,12 +439,23 @@ def init_db(root: Path) -> None:
+             "pool_timeout_seconds": "FLOAT NOT NULL DEFAULT 60.0",
+         }
+         missing = [(name, declaration) for name, declaration in additions.items() if name not in columns]
+-        if missing:
+-            with engine.begin() as connection:
+-                for name, declaration in missing:
+-                    connection.execute(text(
+-                        f"ALTER TABLE provider_profiles ADD COLUMN {name} {declaration}"
+-                    ))
++        provenance_columns = {column["name"] for column in sqlalchemy_inspect(engine).get_columns("provenance")}
++        with engine.begin() as connection:
++            version = connection.execute(text("PRAGMA user_version")).scalar() or 0
++            if version > SCHEMA_VERSION:
++                raise RuntimeError(
++                    f"Database schema version {version} is newer than this code ({SCHEMA_VERSION}); "
++                    "upgrade the application instead of opening a newer database with older code")
++            for name, declaration in missing:
++                connection.execute(text(
++                    f"ALTER TABLE provider_profiles ADD COLUMN {name} {declaration}"
++                ))
++            if "prompt_template_sha256" not in provenance_columns:
++                connection.execute(text("ALTER TABLE provenance ADD COLUMN prompt_template_sha256 VARCHAR(64)"))
++            for statement in _AUDIT_APPEND_ONLY_TRIGGERS:
++                connection.execute(text(statement))
++            if version < SCHEMA_VERSION:
++                connection.execute(text(f"PRAGMA user_version={SCHEMA_VERSION}"))
+     finally:
+         engine.dispose()
+ 
+diff --git a/src/kdp_pipeline/storage/files.py b/src/kdp_pipeline/storage/files.py
+index 98c3601..98da9cc 100644
+--- a/src/kdp_pipeline/storage/files.py
++++ b/src/kdp_pipeline/storage/files.py
+@@ -8,6 +8,16 @@ from pathlib import Path
+ 
+ 
+ 
++def _fsync_directory(directory: Path) -> None:
++    if os.name == "nt":  # directories cannot be opened for fsync on Windows
++        return
++    fd = os.open(directory, os.O_RDONLY)
++    try:
++        os.fsync(fd)
++    finally:
++        os.close(fd)
++
++
+ def sha256_file(path: Path) -> str:
+     digest = hashlib.sha256()
+     with path.open("rb") as fh:
+@@ -23,7 +33,10 @@ def write_json(path: Path, data: dict) -> None:
+         with os.fdopen(fd, "w", encoding="utf-8") as fh:
+             json.dump(data, fh, indent=2, ensure_ascii=False)
+             fh.write("\n")
++            fh.flush()
++            os.fsync(fh.fileno())
+         os.replace(temp_name, path)
++        _fsync_directory(path.parent)
+     except Exception:
+         try:
+             os.unlink(temp_name)
+@@ -33,13 +46,21 @@ def write_json(path: Path, data: dict) -> None:
+ 
+ 
+ def write_text(path: Path, text: str) -> None:
+-    """Atomically write a UTF-8 text artefact."""
++    """Atomically and durably write a UTF-8 text artefact with LF line endings.
++
++    Normalising CRLF/CR keeps content hashes identical across Windows (dev) and Linux (staging)
++    (KDP-AUD-043); fsync of file and directory closes the power-loss window before the DB commit
++    that references the hash."""
++    text = text.replace("\r\n", "\n").replace("\r", "\n")
+     path.parent.mkdir(parents=True, exist_ok=True)
+     fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
+     try:
+         with os.fdopen(fd, "w", encoding="utf-8", newline="") as fh:
+             fh.write(text)
++            fh.flush()
++            os.fsync(fh.fileno())
+         os.replace(temp_name, path)
++        _fsync_directory(path.parent)
+     except Exception:
+         try:
+             os.unlink(temp_name)
+diff --git a/src/kdp_pipeline/storage/relocate.py b/src/kdp_pipeline/storage/relocate.py
+new file mode 100644
+index 0000000..68f684f
+--- /dev/null
++++ b/src/kdp_pipeline/storage/relocate.py
+@@ -0,0 +1,65 @@
++"""Verified relocation of a restored workspace whose SQLite rows hold absolute paths (KDP-AUD-027).
++
++Rewrites every stored path that starts with ``old_root`` (POSIX or Windows form) so it points under
++``root``; verifies each asset's SHA-256 afterwards; commits only if every rewritten asset verifies;
++records one audit event. Nothing is rewritten when verification fails.
++"""
++from __future__ import annotations
++
++import re
++from pathlib import Path, PureWindowsPath, PurePosixPath
++
++from sqlalchemy import select
++
++from kdp_pipeline.storage.audit import AuditEventWriter
++from kdp_pipeline.storage.db import (AssetRow, CanonProposalRow, EditorialFindingRow, ManuscriptBuildRow)
++from kdp_pipeline.storage.files import sha256_file
++
++
++def _rebase(value: str | None, old_root: str, root: Path) -> str | None:
++    if not value:
++        return value
++    windows = bool(re.match(r"^[A-Za-z]:[\\/]", old_root))
++    old = PureWindowsPath(old_root) if windows else PurePosixPath(old_root)
++    candidate = PureWindowsPath(value) if windows else PurePosixPath(value)
++    try:
++        relative = candidate.relative_to(old) if not windows else PureWindowsPath(
++            str(candidate).lower()).relative_to(PureWindowsPath(str(old).lower()))
++    except ValueError:
++        return None
++    if windows:  # keep original casing of the relative part
++        relative = PureWindowsPath(str(candidate)[len(str(old)):].lstrip("\\/"))
++    return str(root.joinpath(*relative.parts))
++
++
++def relocate_workspace(root: Path, old_root: str, *, actor_id: str = "cli-user", dry_run: bool = False) -> dict:
++    from kdp_pipeline.storage.service import session_scope
++    root = root.resolve()
++    changed: dict[str, int] = {}
++    failures: list[str] = []
++    with session_scope(root) as session:
++        targets = ((AssetRow, ("path", "source_ref")), (ManuscriptBuildRow, ("manifest_path",)),
++                   (EditorialFindingRow, ("snapshot_path",)), (CanonProposalRow, ("snapshot_path",)))
++        for model, fields in targets:
++            for row in session.scalars(select(model)):
++                for field in fields:
++                    new = _rebase(getattr(row, field), old_root, root)
++                    if new is not None and new != getattr(row, field):
++                        setattr(row, field, new)
++                        changed[f"{model.__tablename__}.{field}"] = changed.get(f"{model.__tablename__}.{field}", 0) + 1
++        for asset in session.scalars(select(AssetRow)):
++            path = Path(asset.path)
++            if path.is_relative_to(root) and asset.approval_status != "superseded":
++                if not path.is_file() or sha256_file(path) != asset.sha256:
++                    failures.append(asset.asset_id)
++        summary = {"old_root": old_root, "new_root": str(root), "rewritten": changed,
++                   "verification_failures": failures, "committed": False}
++        if failures or dry_run:
++            session.rollback()
++            return summary
++        AuditEventWriter.append(session, actor_id=actor_id, action="workspace.relocated", entity_type="workspace",
++                                entity_id=str(root), correlation_id=str(root), result="success",
++                                metadata={"old_root": old_root, "rewritten": changed})
++        session.commit()
++        summary["committed"] = True
++        return summary
+diff --git a/src/kdp_pipeline/storage/service.py b/src/kdp_pipeline/storage/service.py
+index 69bb47e..58468fb 100644
+--- a/src/kdp_pipeline/storage/service.py
++++ b/src/kdp_pipeline/storage/service.py
+@@ -102,8 +102,11 @@ def create_project(root: Path, name: str, language: str = "en", actor_id: str =
+                 write_json(workspace / "project.json", _project_snapshot(row))
+             except Exception:
+                 session.rollback()
+-                session.execute(delete(AuditEventRow).where(AuditEventRow.entity_id == project_id))
+                 session.execute(delete(ProjectRow).where(ProjectRow.project_id == project_id))
++                # Append-only audit: record the compensation instead of deleting history (KDP-AUD-021).
++                AuditEventWriter.append(session, actor_id=actor_id, action="project.create.rolled_back",
++                                        entity_type="project", entity_id=project_id, correlation_id=project_id,
++                                        result="failed", metadata={"reason": "snapshot write failed"})
+                 session.commit()
+                 raise
+             return row
+@@ -146,8 +149,11 @@ def create_title(root: Path, project_id: str, working_title: str, language: str
+                 write_json(workspace / "00_admin" / "title.json", _title_snapshot(row))
+             except Exception:
+                 session.rollback()
+-                session.execute(delete(AuditEventRow).where(AuditEventRow.entity_id == title_id))
+                 session.execute(delete(TitleRow).where(TitleRow.title_id == title_id))
++                # Append-only audit: record the compensation instead of deleting history (KDP-AUD-021).
++                AuditEventWriter.append(session, actor_id=actor_id, action="title.create.rolled_back",
++                                        entity_type="title", entity_id=title_id, correlation_id=title_id,
++                                        result="failed", metadata={"reason": "snapshot write failed"})
+                 session.commit()
+                 raise
+             return row
+@@ -218,6 +224,28 @@ def planning_requirements_met(root: Path, title_id: str) -> bool:
+         return _planning_requirements_met(session, root, title_id)
+ 
+ 
++def _require_release_evidence(session: Session, title_id: str, target: TitleState) -> None:
++    """Release-side states must be backed by recorded evidence, not by a bare transition (KDP-AUD-003)."""
++    if target not in {TitleState.ASSET_READY, TitleState.PREFLIGHT_PASSED, TitleState.KDP_DRAFT_READY}:
++        return
++    from kdp_pipeline.release.service import _blockers
++    from kdp_pipeline.storage.db import ManuscriptBuildRow, ReleaseCandidateRow
++    if target == TitleState.ASSET_READY:
++        built = session.scalar(select(ManuscriptBuildRow).where(
++            ManuscriptBuildRow.title_id == title_id, ManuscriptBuildRow.status == "built"))
++        if built is None:
++            raise ValueError("Cannot transition to ASSET_READY: no unblocked manuscript build exists")
++        return
++    candidates = list(session.scalars(select(ReleaseCandidateRow).where(ReleaseCandidateRow.title_id == title_id)))
++    if target == TitleState.PREFLIGHT_PASSED:
++        if not any(not _blockers(session, candidate) for candidate in candidates):
++            raise ValueError("Cannot transition to PREFLIGHT_PASSED: no release candidate is free of blockers")
++        return
++    if not any(candidate.status == "approved_for_manual_kdp_action" and not _blockers(session, candidate)
++               for candidate in candidates):
++        raise ValueError("Cannot transition to KDP_DRAFT_READY: no approved, unblocked release candidate exists")
++
++
+ def transition_title(root: Path, title_id: str, target: TitleState, actor_id: str = "cli-user") -> TitleRow:
+     with session_scope(root) as session:
+         row = session.get(TitleRow, title_id)
+@@ -227,6 +255,7 @@ def transition_title(root: Path, title_id: str, target: TitleState, actor_id: st
+         require_transition(current, target)
+         if target == TitleState.PLANNED and not _planning_requirements_met(session, root, title_id):
+             raise ValueError("Cannot transition to PLANNED: required accepted planning artefacts are incomplete")
++        _require_release_evidence(session, title_id, target)
+         before = row.status
+         row.status = target.value
+         AuditEventWriter.append(
+diff --git a/src/kdp_pipeline/verification/service.py b/src/kdp_pipeline/verification/service.py
+index 18b6e7d..2020fa0 100644
+--- a/src/kdp_pipeline/verification/service.py
++++ b/src/kdp_pipeline/verification/service.py
+@@ -20,7 +20,7 @@ from kdp_pipeline.storage.files import sha256_file
+ from kdp_pipeline.storage.service import session_scope
+ 
+ 
+-_SCRIPTURE_PLACEHOLDER = re.compile(r"\[SCRIPTURE NEEDED\]", re.IGNORECASE)
++from kdp_pipeline.build.service import _SCRIPTURE_PLACEHOLDER  # single detector (KDP-AUD-014)
+ _FLAG_KINDS = {"source_claim", "research", "expert_review", "sensitivity"}
+ _ITEM_DECISIONS = {"verified", "not_verified", "not_applicable"}
+ _RIGHTS_DECISIONS = {"cleared", "restricted", "not_applicable"}
+diff --git a/src/kdp_pipeline/workspace/authoring.py b/src/kdp_pipeline/workspace/authoring.py
+index 093a78b..37084d5 100644
+--- a/src/kdp_pipeline/workspace/authoring.py
++++ b/src/kdp_pipeline/workspace/authoring.py
+@@ -310,7 +310,7 @@ def create_manual_revision(root: Path, title_id: str, asset_id: str,
+         project_id = title.project_id
+         chapter_number = None
+         if is_chapter or source.asset_type == "planning.chapter-card":
+-            pattern = (r"chapter\.(?:draft|revision)\.(\d+)[-.]" if is_chapter else
++            pattern = (r"chapter\.(?:draft|revision|revise)\.(\d+)[-.]" if is_chapter else
+                        r"(?:chapter_card|chapter-card)[-.](\d+)[-.]")
+             chapter_match = re.search(pattern, Path(source.path).name)
+             if chapter_match is None:
+@@ -332,18 +332,24 @@ def create_manual_revision(root: Path, title_id: str, asset_id: str,
+             if source is None or sha256_file(Path(source.path)) != source_hash:
+                 raise ValueError("Source changed while the revision was being saved.")
+             digest = sha256_file(path)
++            source_prov_row = session.scalar(select(ProvenanceRow).where(ProvenanceRow.asset_id == asset_id))
++            ai_lineage = bool(source.creator_type == "ai" or (source_prov_row and str(
++                source_prov_row.ai_classification or "").upper().startswith("AI_GENERATED")))
++            # KDP treats text created by an AI tool as AI-generated even after human editing; only
++            # content the human created is "AI-assisted" (KDP-AUD-031).
++            classification = "AI_GENERATED_HUMAN_EDITED" if ai_lineage else "HUMAN_CREATED"
+             asset = AssetRow(asset_id=asset_id_new, title_id=title_id,
+                 asset_type="chapter.revision" if is_chapter else source.asset_type,
+                 path=str(path.resolve()), version="1.0",
+-                sha256=digest, creator_type="human", creator=reviewer, source_ref=asset_id,
+-                ai_classification="AI_ASSISTED", approval_status="experimental", created_at=utcnow())
++                sha256=digest, creator_type="ai+human" if ai_lineage else "human", creator=reviewer, source_ref=asset_id,
++                ai_classification=classification, approval_status="experimental", created_at=utcnow())
+             provenance = ProvenanceRow(provenance_id=new_id("PROV"), asset_id=asset_id_new,
+                 job_id=None, provider="human", model="manual-edit",
+                 prompt_template_id="workspace/manual-content-revision", prompt_template_version="1.0",
+                 rendered_prompt_sha256=source_hash,
+                 input_references_json=json.dumps([asset_id]), input_hashes_json=json.dumps([source_hash]),
+                 context_manifest_hash=source_hash, output_hash=digest, generation_timestamp=utcnow(),
+-                human_contribution_note=reason, ai_classification="AI_ASSISTED", reviewer=reviewer)
++                human_contribution_note=reason, ai_classification=classification, reviewer=reviewer)
+             session.add_all([asset, provenance])
+             AuditEventWriter.append(session, actor_id=reviewer, action="content.manual_revision.created",
+                 entity_type="asset", entity_id=asset_id_new, correlation_id=title_id,
+diff --git a/src/kdp_pipeline/workspace/review.py b/src/kdp_pipeline/workspace/review.py
+index 7a383f9..4a0a504 100644
+--- a/src/kdp_pipeline/workspace/review.py
++++ b/src/kdp_pipeline/workspace/review.py
+@@ -161,7 +161,7 @@ def inspect_review(root: Path, kind: str, identifier: str) -> dict | None:
+             if accepted_copy:
+                 blockers.append(f"This artefact was already accepted as {accepted_copy.asset_id}.")
+             if row.asset_type in {"chapter.draft", "chapter.revision"}:
+-                match = re.search(r"chapter\.(?:draft|revision)\.(\d+)[-.]", Path(row.path).name)
++                match = re.search(r"chapter\.(?:draft|revision|revise)\.(\d+)[-.]", Path(row.path).name)
+                 chapter_number = int(match.group(1)) if match else None
+                 if chapter_number is None:
+                     blockers.append("The chapter number cannot be determined from the artefact path.")
+diff --git a/src/kdp_pipeline/workspace/server.py b/src/kdp_pipeline/workspace/server.py
+index ff53462..91e256b 100644
+--- a/src/kdp_pipeline/workspace/server.py
++++ b/src/kdp_pipeline/workspace/server.py
+@@ -5,6 +5,7 @@ from importlib.resources import files
+ from pathlib import Path
+ from threading import Lock
+ from urllib.parse import parse_qs, unquote, urlsplit
++import logging
+ import re
+ import secrets
+ 
+@@ -18,6 +19,15 @@ from kdp_pipeline.workspace.review import inspect_review
+ 
+ 
+ _ROUTE_ID = re.compile(r"^[A-Za-z0-9-]{1,80}$")
++_LOG = logging.getLogger("kdp_pipeline.workspace.access")
++_SECURITY_HEADERS = (
++    ("Cache-Control", "no-store"),
++    ("X-Content-Type-Options", "nosniff"),
++    ("Referrer-Policy", "no-referrer"),
++    ("X-Frame-Options", "DENY"),
++    ("Content-Security-Policy", "default-src 'self'; style-src 'self'; script-src 'self'; "
++     "img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"),
++)
+ _STATIC_FILES = {
+     "workspace.css": ("text/css; charset=utf-8", "static/workspace.css"),
+     "workspace.js": ("text/javascript; charset=utf-8", "static/workspace.js"),
+@@ -48,24 +58,38 @@ def create_workspace_server(root: Path, *, port: int = 8765) -> ThreadingHTTPSer
+     class WorkspaceHandler(BaseHTTPRequestHandler):
+         server_version = "KDPWorkspace"
+         sys_version = ""
++        timeout = 30  # bound idle/slow connections; stdlib default is no timeout (KDP-AUD-018)
+ 
+         def log_message(self, _format: str, *args: object) -> None:
+-            # Requests can contain locally entered search terms; do not log them.
+-            return
++            # Access log without query strings or bodies (search terms stay private) (KDP-AUD-034).
++            _LOG.info("%s %s %s", self.client_address[0], self.command, urlsplit(self.path).path)
++
++        def end_headers(self) -> None:
++            # Every response — pages, redirects, 405/413/5xx, stdlib errors — carries the same headers (KDP-AUD-017).
++            for name, value in _SECURITY_HEADERS:
++                self.send_header(name, value)
++            super().end_headers()
++
++        def handle_one_request(self) -> None:
++            try:
++                super().handle_one_request()
++            except (ConnectionError, TimeoutError):
++                raise
++            except Exception:  # noqa: BLE001 — never drop the connection without an answer (KDP-AUD-019)
++                _LOG.exception("unhandled Workspace error")
++                try:
++                    self._respond(render_not_found("The Workspace could not complete this request "
++                                                   "(the database may be busy or unavailable). Nothing was confirmed; "
++                                                   "reload and inspect the current records."),
++                                  "text/html; charset=utf-8", 503)
++                except Exception:  # noqa: BLE001
++                    pass
+ 
+         def _respond(self, body: str | bytes, content_type: str, status: int = 200, *, head: bool = False) -> None:
+             payload = body.encode("utf-8") if isinstance(body, str) else body
+             self.send_response(status)
+             self.send_header("Content-Type", content_type)
+             self.send_header("Content-Length", str(len(payload)))
+-            self.send_header("Cache-Control", "no-store")
+-            self.send_header("X-Content-Type-Options", "nosniff")
+-            self.send_header("Referrer-Policy", "no-referrer")
+-            self.send_header("X-Frame-Options", "DENY")
+-            self.send_header("Content-Security-Policy",
+-                             "default-src 'self'; style-src 'self'; script-src 'self'; "
+-                             "img-src 'self' data:; connect-src 'self'; base-uri 'none'; "
+-                             "form-action 'self'; frame-ancestors 'none'")
+             self.end_headers()
+             if not head:
+                 self.wfile.write(payload)
+@@ -264,7 +288,6 @@ def create_workspace_server(root: Path, *, port: int = 8765) -> ThreadingHTTPSer
+                 self.send_response(303)
+                 self.send_header("Location", f"/titles/{title_id}?result={flash_id}#pending")
+                 self.send_header("Content-Length", "0")
+-                self.send_header("Cache-Control", "no-store")
+                 self.end_headers()
+                 return
+             if book_match or project_match:
+@@ -285,7 +308,6 @@ def create_workspace_server(root: Path, *, port: int = 8765) -> ThreadingHTTPSer
+                 self.send_response(303)
+                 self.send_header("Location", f"{location}?result={flash_id}")
+                 self.send_header("Content-Length", "0")
+-                self.send_header("Cache-Control", "no-store")
+                 self.end_headers()
+                 return
+             if review_match:
+@@ -306,7 +328,6 @@ def create_workspace_server(root: Path, *, port: int = 8765) -> ThreadingHTTPSer
+                 self.send_response(303)
+                 self.send_header("Location", f"/reviews/{kind}/{identifier}?result={flash_id}")
+                 self.send_header("Content-Length", "0")
+-                self.send_header("Cache-Control", "no-store")
+                 self.end_headers()
+                 return
+             try:
+@@ -329,14 +350,12 @@ def create_workspace_server(root: Path, *, port: int = 8765) -> ThreadingHTTPSer
+             else:
+                 self.send_header("Location", f"/titles/{title_id}?done={action}#actions")
+             self.send_header("Content-Length", "0")
+-            self.send_header("Cache-Control", "no-store")
+             self.end_headers()
+ 
+         def _method_not_allowed(self) -> None:
+             self.send_response(405)
+             self.send_header("Allow", "GET, HEAD")
+             self.send_header("Content-Length", "0")
+-            self.send_header("Cache-Control", "no-store")
+             self.end_headers()
+ 
+         do_PUT = _method_not_allowed
+diff --git a/tests/conftest.py b/tests/conftest.py
+new file mode 100644
+index 0000000..d72252e
+--- /dev/null
++++ b/tests/conftest.py
+@@ -0,0 +1,8 @@
++"""Suite-wide test configuration.
++
++``provider.example`` is the fixture host used by the provider tests; with the provider host
++allow-list (KDP-AUD-009) it must be allowed explicitly, exactly as an operator would.
++"""
++import os
++
++os.environ.setdefault("KDP_PROVIDER_HOST_ALLOWLIST", "provider.example")
+diff --git a/tests/integration/test_sprint16_workspace_review.py b/tests/integration/test_sprint16_workspace_review.py
+index 032a676..f22a5b7 100644
+--- a/tests/integration/test_sprint16_workspace_review.py
++++ b/tests/integration/test_sprint16_workspace_review.py
+@@ -255,7 +255,8 @@ def test_release_approval_requires_every_human_check_and_keeps_manual_publicatio
+             run_release_check(tmp_path, candidate.candidate_id, {
+                 "review_hash": current["review_hash"], "confirm_consequences": "yes",
+                 "domain": domain, "key": key, "decision": "complete",
+-                "reviewer": "human-reviewer", "rationale": "Checked against current evidence.",
++                # The approver must differ from the checklist reviewer (segregation of duties, KDP-AUD-015).
++                "reviewer": "checklist-reviewer", "rationale": "Checked against current evidence.",
+                 "evidence_reference": "human-review-record",
+                 "statement": "Human-reviewed AI use disclosure." if domain == "ai_disclosure" else "",
+             })
+diff --git a/tests/integration/test_sprint65_editorial_defaults.py b/tests/integration/test_sprint65_editorial_defaults.py
+index ed54d23..8a9640b 100644
+--- a/tests/integration/test_sprint65_editorial_defaults.py
++++ b/tests/integration/test_sprint65_editorial_defaults.py
+@@ -91,7 +91,7 @@ def test_developmental_editorial_uses_profile_default_or_explicit_override(tmp_p
+         "model": "gpt-5",
+         "max_output_tokens": expected,
+         "prompt_template_id": "editorial/developmental",
+-        "prompt_template_version": "1.0",
++        "prompt_template_version": "1.1",  # developmental v1.1 carries the chapter (KDP-AUD-005)
+         "reasoning_effort": "low",
+         "timeouts_seconds": {"connect": 60.0, "read": 180.0, "write": 60.0, "pool": 60.0},
+     }
+diff --git a/tests/unit/test_planning_contracts.py b/tests/unit/test_planning_contracts.py
+index 9d9db48..bc0e961 100644
+--- a/tests/unit/test_planning_contracts.py
++++ b/tests/unit/test_planning_contracts.py
+@@ -15,6 +15,7 @@ def test_planning_prompt_registry_renders_versioned_prompt():
+     prompt = PromptRegistry(Path("prompts")).render(
+         "planning/positioning-brief",
+         {"title_id": "BK-1", "working_title": "Test", "target_reader": "Readers", "chapter_number": ""},
++        template_version="1.0",  # v1.1 (with planning context) now coexists (KDP-AUD-006)
+     )
+     assert prompt.template_version == "1.0"
+     assert prompt.rendered_sha256

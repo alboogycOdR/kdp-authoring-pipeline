@@ -1,0 +1,1 @@
+{"refused": "1 validation error for ProviderProfileSettings\napi_key_env\n  Value error, api_key_env must name a dedicated provider key variable, not a cloud/VCS/database/app secret [type=value_error, input_value='AWS_SECRET_ACCESS_KEY', input_type=str]\n    For further information visit https://errors.pydantic.dev"}

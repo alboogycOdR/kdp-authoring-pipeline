@@ -1,0 +1,293 @@
+KDP PIPELINE  /  COMPANION GUIDE
+Make your next book
+one decision at a time
+A practical browser guide from the first idea to a reviewed manuscript and
+release packet.
+01
+Save your idea
+02
+Shape the concept
+03
+Plan the book
+04
+Draft chapters
+05
+Verify details
+06
+Prepare release
+You make the important decisions.
+AI results stay experimental until you accept them. KDP publication stays manual.
+Use with the Help page in the Workspace  |  September 2026
+
+
+=== PAGE ===
+KDP PIPELINE  /  BOOK CREATOR GUIDE
+Browser workflow companion
+Start with one idea
+Begin on the Workspace home page. You do not need a command line or server access.
+Start
+Concept
+Plan
+Draft
+Verify
+Prepare
+Work in the browser. Review before accepting. Publish manually.
+2 / 8
+What to have ready
+ A working title. It can be provisional; choose wording that helps you recognize the project.
+A reader description: age or life stage, interests, and what they need from the book.
+Two or three sentences about the book idea and the experience you want readers to have.
+A monthly AI spending limit and a maximum estimated cost for any one request, both in USD.
+In the browser
+Open Workspace, find Start a new book, and fill in your name, project name, working book title, intended
+reader, and idea. Select an available AI provider and set both spending limits. Choose Create book and save
+idea.
+WHAT IS SAVED
+The application creates a project, a title, and your human-written idea note. It also records your selected
+provider and hard spending limits. This step does not make an AI request.
+Know the two containers
+Project
+The workspace for one book or a related set of books. Its provider and spending limits
+apply to work inside it.
+Title
+The individual book you open to develop its concept, plan, chapters, verification, and
+release packet.
+IF YOU CANNOT START
+If no provider appears, ask the system operator to configure a ready provider with model pricing. The
+browser cannot create a book without one. Do not enter an API key into a book form.
+
+
+=== PAGE ===
+KDP PIPELINE  /  BOOK CREATOR GUIDE
+Browser workflow companion
+Shape the concept
+Use the saved idea to work out who the book is for and what makes it worth creating.
+Start
+Concept
+Plan
+Draft
+Verify
+Prepare
+Work in the browser. Review before accepting. Publish manually.
+3 / 8
+Follow the concept path
+Reader brief
+Under Book authoring > Develop your idea, generate an audience brief. Check that it
+describes the intended reader accurately.
+Options
+Generate concept options. These are suggestions, not commitments. Choose an idea
+that fits your reader and purpose.
+Concept brief
+Develop the chosen option into a fuller concept brief. Read the complete result and use
+Edit in browser if you need to correct it.
+Check
+Run Check concept completeness. An advisory scorecard can help you notice gaps, but it
+does not approve the idea.
+Human approval
+Open the concept brief under Awaiting acceptance. Read its content, provenance,
+findings, blockers, and conditions before accepting it.
+Questions to ask before accepting
+ Can I explain this book in one or two plain sentences?
+Is the intended reader specific enough to guide writing choices without excluding people unnecessarily?
+Does the concept promise an experience or benefit the book can reasonably deliver?
+For fiction: are the story premise and reader appeal clear? For nonfiction: is the reader problem and
+practical value clear?
+DECISION POINT
+Acceptance is a human gate. If the concept is weak, revise the experimental brief and review the new version.
+When the concept is accepted, you can request a drafting brief and move into planning.
+
+
+=== PAGE ===
+KDP PIPELINE  /  BOOK CREATOR GUIDE
+Browser workflow companion
+Plan the book
+Turn the concept into a promise, structure, and chapter-by-chapter writing guide.
+Start
+Concept
+Plan
+Draft
+Verify
+Prepare
+Work in the browser. Review before accepting. Publish manually.
+4 / 8
+Build the plan in order
+Positioning
+Define the reader, the book's promise, its tone, and how it should be distinguished.
+Review and accept it, then advance to Validated when the gate allows.
+Book brief
+Set the scope, reader outcomes or story experience, voice, boundaries, and success
+criteria. Review and accept it.
+Outline
+Map the full journey of the book. Check the sequence, gaps, repetition, and whether the
+promised length and scope feel workable.
+Chapter cards
+Create a card for each chapter or entry. Each card should tell the writer what that part
+must accomplish and how it connects to the whole.
+Use Book authoring > Plan the book. Open every generated item in Awaiting acceptance; a generated plan is
+not automatically the approved plan. When the required items are accepted, use Advance to planned.
+A useful planning review
+ Compare every chapter card with the accepted outline. Does each chapter have a distinct job?
+Check the audience and tone across positioning, brief, outline, and cards. They should point to the same
+book.
+Keep any claims, source needs, or rights questions visible for later verification.
+IF A STAGE BUTTON IS BLOCKED
+Open the title's planning and Awaiting acceptance sections. The system may be waiting for an accepted item
+or another required condition. Resolve the named requirement, then try the stage button again.
+
+
+=== PAGE ===
+KDP PIPELINE  /  BOOK CREATOR GUIDE
+Browser workflow companion
+Draft and review chapters
+Write one chapter at a time so each draft can be checked against the accepted plan.
+Start
+Concept
+Plan
+Draft
+Verify
+Prepare
+Work in the browser. Review before accepting. Publish manually.
+5 / 8
+The chapter cycle
+1. Draft
+Choose Start drafting stage, then Draft one chapter. Enter the chapter number that
+matches an accepted card.
+2. Read
+Open the experimental draft. Check the chapter's purpose, flow, tone, reader
+usefulness, and alignment with the card.
+3. Analyze
+Run continuity or developmental analysis when useful. Other editorial passes can focus
+on voice, line, copy, reader experience, or consistency.
+4. Revise
+Use Edit in browser for a manual revision, or request an AI revision if you choose. The
+original stays available; each new version remains experimental.
+5. Accept
+Open the chosen draft or revision under Awaiting acceptance. Review its content,
+provenance, findings, blockers, and any conditions before accepting it.
+6. Continue
+A chapter summary can carry continuity context into later work. Then repeat the cycle
+for the next chapter.
+What acceptance means
+Acceptance puts the chosen version into the manuscript's accepted chapter set. It does not mean every
+source, claim, or quotation is verified, or that the book is ready for KDP. Record unresolved conditions instead
+of hiding them.
+EXAMPLE CONDITION
+If a chapter contains [SCRIPTURE NEEDED], leave it visible. Acceptance can carry a Scripture verification
+condition, but the reference must later be supplied and checked by a person. Never invent a quotation to
+clear the marker.
+
+
+=== PAGE ===
+KDP PIPELINE  /  BOOK CREATOR GUIDE
+Browser workflow companion
+Verify before release
+Use evidence and human judgment to clear material that the book depends on.
+Start
+Concept
+Plan
+Draft
+Verify
+Prepare
+Work in the browser. Review before accepting. Publish manually.
+6 / 8
+What needs checking?
+Scripture
+Scan accepted chapters for placeholders. A person supplies an exact reference and
+checks it against the project's source policy.
+Sources
+Check cited material and the exact statement it supports. Record a traceable evidence
+reference.
+Claims
+Flag statements that need factual support, qualification, or revision.
+Research
+Check research-derived points and whether the evidence applies to the reader and
+context.
+Rights
+Record third-party text, images, or other material and the evidence for permitted use or
+a decision not to use it.
+On the title page, use Workflow actions > Verification to scan for placeholders or add a verification flag or
+rights record. Open each pending item from the title page or attention queue. The review page asks for a
+named reviewer, rationale, and evidence where needed.
+A SCAN IS NOT VERIFICATION
+The scan only finds placeholders in accepted chapters. It does not choose a reference, edit manuscript text,
+or mark anything verified. A recorded human decision must match the actual book content and evidence.
+What a blocker tells you
+A blocker is a visible reason the manuscript or release candidate is not ready. It can be a missing verification,
+unresolved approval condition, rights issue, or another preflight concern. Read the exact blocker before
+deciding what to change.
+
+
+=== PAGE ===
+KDP PIPELINE  /  BOOK CREATOR GUIDE
+Browser workflow companion
+Build and prepare release
+Assemble accepted content, inspect the packet, and keep publication under human control.
+Start
+Concept
+Plan
+Draft
+Verify
+Prepare
+Work in the browser. Review before accepting. Publish manually.
+7 / 8
+From chapters to review packet
+Build
+Choose Create Markdown build. The system assembles accepted chapters and records
+the included assets, file hashes, and build status.
+Inspect
+Read the build and its blockers. A blocked draft build can still help you review the
+manuscript; blocked does not mean release-ready.
+Candidate
+Create a release candidate from a selected build. It freezes a particular manuscript build
+for preflight review.
+Packet
+Export the review packet. It gathers the candidate, provenance, blockers, and other
+evidence for a human review.
+Decision
+The release review page shows the artefact, provenance, findings, conditions, blockers,
+and consequences before approval, hold, or rejection.
+Before a positive release decision
+ All intended chapters are accepted and the build contains the right versions in the right order.
+Scripture, source, claim, research, and rights questions have human evidence and decisions.
+No release blockers or unresolved approval conditions remain.
+The review packet matches the build and is understood by the person making the decision.
+PUBLICATION BOUNDARY
+This Workspace prepares and reviews the book. It does not upload to KDP or publish for you. Final KDP action
+remains manual and human-controlled.
+
+
+=== PAGE ===
+KDP PIPELINE  /  BOOK CREATOR GUIDE
+Browser workflow companion
+Keep this page nearby
+A quick reference for finding your place and deciding what to do next.
+Start
+Concept
+Plan
+Draft
+Verify
+Prepare
+Work in the browser. Review before accepting. Publish manually.
+8 / 8
+Where to look in the Workspace
+Workspace home
+Start a new book, search for projects or titles, and see work needing attention first.
+Your project
+Open its titles and see the selected provider, budget, and usage summary.
+Your title
+Use Book authoring, Awaiting acceptance, Workflow actions, Verification, Builds, and
+Release.
+Review page
+Read the exact item and its context, then record an explicit human decision.
+If something is not moving
+ Look for a named blocker or missing accepted artefact before repeating an action.
+A failed or unclear AI request may still have incurred usage. Inspect its job and cost before deciding to
+retry.
+If generation is unavailable, check whether your project has a selected ready provider, configured pricing,
+and a hard budget. Ask the system operator for configuration help.
+If a review is unavailable, confirm the item is still experimental and its source content has not changed.
+YOUR REPEATABLE ROUTINE
+Open the title -> inspect Attention -> do one action -> read its result -> review or revise -> accept only when
+ready -> check remaining blockers. The system records state; you supply judgment.
+The in-app Help page has the shorter version of this journey. On staging, the Workspace is available only to permitted
+Tailscale users. Your system operator manages access and provider configuration; creators work through the browser.

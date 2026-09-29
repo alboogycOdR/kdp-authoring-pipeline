@@ -1,0 +1,9 @@
+{
+  "recorded": {
+    "input_tokens": 100000,
+    "output_tokens": 100000,
+    "estimated_cost": 1.125,
+    "source": "estimated"
+  },
+  "configured_rate_cost": 1.125
+}

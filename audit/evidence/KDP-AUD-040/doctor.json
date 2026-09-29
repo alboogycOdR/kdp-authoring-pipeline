@@ -1,0 +1,32 @@
+[
+  {
+    "status": "WARN",
+    "check": "provider-selection:PRJ-20260929-70A5E68E",
+    "message": "no provider selected",
+    "recommended_action": "Select an enabled provider profile before running generation."
+  },
+  {
+    "status": "WARN",
+    "check": "usage.pricing",
+    "message": "5 usage event(s) have unknown cost",
+    "recommended_action": "Configure model pricing or accept that these costs cannot be budgeted."
+  },
+  {
+    "status": "FAIL",
+    "check": "build-manifest:BLD-20260929-339DCD7A",
+    "message": "manifest missing or hash mismatch",
+    "recommended_action": "Do not release from this build; rebuild from accepted chapters."
+  },
+  {
+    "status": "FAIL",
+    "check": "approval:APR-20260929-322CFE1E",
+    "message": "approved hash does not match the accepted asset",
+    "recommended_action": "Treat the acceptance as invalid until a human re-reviews the asset."
+  },
+  {
+    "status": "FAIL",
+    "check": "canon:BK-20260929-51E1C1F8:entities.json",
+    "message": "canon file changed outside the CanonProposal workflow",
+    "recommended_action": "Restore the canon file or record the change through an approved proposal; continuity analysis reads it."
+  }
+]

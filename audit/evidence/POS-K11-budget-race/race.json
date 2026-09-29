@@ -1,0 +1,19 @@
+{
+  "monthly_limit": 0.015719999999999998,
+  "results": [
+    "GenerationServiceError: Project monthly budget would be exceeded: projected $0.020466; limit $0.015720",
+    "GenerationServiceError: Project monthly budget would be exceeded: projected $0.020465; limit $0.015720",
+    "GenerationServiceError: Project monthly budget would be exceeded: projected $0.020465; limit $0.015720",
+    "GenerationServiceError: Project monthly budget would be exceeded: projected $0.020465; limit $0.015720",
+    "GenerationServiceError: Project monthly budget would be exceeded: projected $0.020465; limit $0.015720",
+    "GenerationServiceError: Project monthly budget would be exceeded: projected $0.020465; limit $0.015720",
+    "GenerationServiceError: Project monthly budget would be exceeded: projected $0.016258; limit $0.015720",
+    "GenerationServiceError: Project monthly budget would be exceeded: projected $0.016258; limit $0.015720",
+    "OperationalError: (sqlite3.OperationalError) database is locked\n[SQL: INSERT INTO jobs (job_id, ti",
+    "OperationalError: (sqlite3.OperationalError) database is locked\n[SQL: INSERT INTO jobs (job_id, ti",
+    "GenerationServiceError: Project monthly budget would be exceeded: projected $0.016258; limit $0.015720",
+    "ok"
+  ],
+  "provider_calls": 1,
+  "reserved_total": 0.0102325
+}

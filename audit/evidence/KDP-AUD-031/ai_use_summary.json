@@ -1,0 +1,15 @@
+{
+  "assets": [
+    {
+      "asset_id": "AST-20260929-AA303280",
+      "creator_type": "ai+human",
+      "provider": "human",
+      "model": "manual-edit",
+      "prompt_template_id": "workspace/manual-content-revision",
+      "ai_classification": "AI_GENERATED_HUMAN_EDITED",
+      "disclosure_decision": null
+    }
+  ],
+  "ai_asset_count": 1,
+  "status": "pending_human_disclosure"
+}

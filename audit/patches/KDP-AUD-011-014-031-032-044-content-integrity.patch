@@ -1,0 +1,150 @@
+diff --git a/src/kdp_pipeline/build/service.py b/src/kdp_pipeline/build/service.py
+index 5ee2a4f..34ba2b5 100644
+--- a/src/kdp_pipeline/build/service.py
++++ b/src/kdp_pipeline/build/service.py
+@@ -27,7 +27,10 @@ from kdp_pipeline.storage.service import register_asset, session_scope
+ 
+ 
+ _CHAPTER_NAME = re.compile(r"chapter-(?P<number>\d{3})\.md$", re.IGNORECASE)
+-_SCRIPTURE_PLACEHOLDER = re.compile(r"\[SCRIPTURE NEEDED\]", re.IGNORECASE)
++_SCRIPTURE_PLACEHOLDER = re.compile(
++    r"[\[【［(]\s*SCRIPTURE[\s\u00a0]+NEEDED\b[^\]】］)\n]{0,80}[\]】］)]", re.IGNORECASE)
++# Unfinished-text markers that must never reach a release build (KDP-AUD-014).
++_UNFINISHED_MARKERS = re.compile(r"(?im)^\s*(?:TODO|TBD|FIXME)\b|\[(?:TK|TODO|TBD)\]|\blorem ipsum\b")
+ _MATTER_TYPES = {"front": "manuscript.front_matter", "back": "manuscript.back_matter"}
+ 
+ 
+@@ -152,6 +155,10 @@ def build_manuscript(root: Path, *, title_id: str, builder: str = "cli-user") ->
+                 line = text.count("\n", 0, placeholder.start()) + 1
+                 blockers.append({"type": "scripture_placeholder", "asset_id": asset.asset_id,
+                     "locator": f"chapter-{number:03d}:line-{line:04d}", "text": placeholder.group(0)})
++            for marker in _UNFINISHED_MARKERS.finditer(text):
++                line = text.count("\n", 0, marker.start()) + 1
++                blockers.append({"type": "unfinished_text", "asset_id": asset.asset_id,
++                    "locator": f"chapter-{number:03d}:line-{line:04d}", "text": marker.group(0).strip()})
+         chapters.sort(key=lambda item: item[0])
+         numbers = [item[0] for item in chapters]
+         if len(numbers) != len(set(numbers)):
+@@ -215,8 +222,11 @@ def build_manuscript(root: Path, *, title_id: str, builder: str = "cli-user") ->
+             sections.append(accepted_matter["front"].strip())
+         sections.append(toc)
+         for number, _asset, text in chapters:
+-            heading = next((line for line in text.splitlines() if line.startswith("# ")), f"# Chapter {number}")
+-            body = "\n".join(line for line in text.splitlines() if line != heading).strip()
++            lines = text.splitlines()
++            heading_index = next((i for i, line in enumerate(lines) if line.startswith("# ")), None)
++            heading = lines[heading_index] if heading_index is not None else f"# Chapter {number}"
++            # Remove only the heading line itself; repeated identical lines are content (KDP-AUD-032).
++            body = "\n".join(lines[:heading_index] + lines[heading_index + 1:] if heading_index is not None else lines).strip()
+             sections.append(f'<a id="chapter-{number:03d}"></a>\n\n{heading}\n\n{body}'.rstrip())
+         if accepted_matter.get("back", "").strip():
+             sections.append(accepted_matter["back"].strip())
+diff --git a/src/kdp_pipeline/chapters/service.py b/src/kdp_pipeline/chapters/service.py
+index 9d08a62..7dbfdb8 100644
+--- a/src/kdp_pipeline/chapters/service.py
++++ b/src/kdp_pipeline/chapters/service.py
+@@ -16,7 +16,7 @@ from kdp_pipeline.storage.files import sha256_file, write_text
+ from kdp_pipeline.storage.service import session_scope
+ 
+ 
+-_CHAPTER_IN_PATH = re.compile(r"chapter\.(?:draft|revision)\.(?P<number>\d{1,3})[-.]", re.IGNORECASE)
++_CHAPTER_IN_PATH = re.compile(r"chapter\.(?:draft|revision|revise)\.(?P<number>\d{1,3})[-.]", re.IGNORECASE)
+ _ACCEPTED_PATH = re.compile(r"chapter-(?P<number>\d{3})\.md$")
+ _MAX_BATCH = 10
+ 
+diff --git a/src/kdp_pipeline/continuity/service.py b/src/kdp_pipeline/continuity/service.py
+index aa1bc65..56d9ee5 100644
+--- a/src/kdp_pipeline/continuity/service.py
++++ b/src/kdp_pipeline/continuity/service.py
+@@ -138,14 +138,21 @@ def _validate_output(text: str) -> dict:
+         r"\b(required )?(chapter|draft|context|positioning|book brief|outline|chapter card|canon baseline)\b",
+         folded, re.DOTALL,
+     )
+-    if requests_missing_context or declares_missing_context or any(phrase in folded for phrase in (
++    explicit_refusal = any(phrase in folded for phrase in (
+         "i don't have the chapter", "i do not have the chapter", "send the materials", "context is missing",
+-    )):
+-        raise ContinuityOutputInvalid("continuity output says required context is missing")
++    ))
+     try:
+         value = json.loads(stripped)
+     except json.JSONDecodeError as exc:
++        if requests_missing_context or declares_missing_context or explicit_refusal:
++            raise ContinuityOutputInvalid("continuity output says required context is missing") from exc
+         raise ContinuityOutputInvalid("continuity output is not valid JSON") from exc
++    # Inside a valid JSON contract, words like "missing ... outline" are usually genuine findings
++    # ("the draft is missing the outline's second beat"); only explicit requests for materials,
++    # or a refusal, invalidate the analysis (KDP-AUD-011).
++    if explicit_refusal or (requests_missing_context and not (isinstance(value, dict)
++                                                              and value.get("supplied_context_confirmed") is True)):
++        raise ContinuityOutputInvalid("continuity output says required context is missing")
+     if not isinstance(value, dict):
+         raise ContinuityOutputInvalid("continuity output must be a JSON object")
+     missing = [key for key in REQUIRED_FIELDS if key not in value or not isinstance(value[key], REQUIRED_FIELDS[key])]
+diff --git a/src/kdp_pipeline/verification/service.py b/src/kdp_pipeline/verification/service.py
+index 18b6e7d..2020fa0 100644
+--- a/src/kdp_pipeline/verification/service.py
++++ b/src/kdp_pipeline/verification/service.py
+@@ -20,7 +20,7 @@ from kdp_pipeline.storage.files import sha256_file
+ from kdp_pipeline.storage.service import session_scope
+ 
+ 
+-_SCRIPTURE_PLACEHOLDER = re.compile(r"\[SCRIPTURE NEEDED\]", re.IGNORECASE)
++from kdp_pipeline.build.service import _SCRIPTURE_PLACEHOLDER  # single detector (KDP-AUD-014)
+ _FLAG_KINDS = {"source_claim", "research", "expert_review", "sensitivity"}
+ _ITEM_DECISIONS = {"verified", "not_verified", "not_applicable"}
+ _RIGHTS_DECISIONS = {"cleared", "restricted", "not_applicable"}
+diff --git a/src/kdp_pipeline/workspace/authoring.py b/src/kdp_pipeline/workspace/authoring.py
+index 093a78b..37084d5 100644
+--- a/src/kdp_pipeline/workspace/authoring.py
++++ b/src/kdp_pipeline/workspace/authoring.py
+@@ -310,7 +310,7 @@ def create_manual_revision(root: Path, title_id: str, asset_id: str,
+         project_id = title.project_id
+         chapter_number = None
+         if is_chapter or source.asset_type == "planning.chapter-card":
+-            pattern = (r"chapter\.(?:draft|revision)\.(\d+)[-.]" if is_chapter else
++            pattern = (r"chapter\.(?:draft|revision|revise)\.(\d+)[-.]" if is_chapter else
+                        r"(?:chapter_card|chapter-card)[-.](\d+)[-.]")
+             chapter_match = re.search(pattern, Path(source.path).name)
+             if chapter_match is None:
+@@ -332,18 +332,24 @@ def create_manual_revision(root: Path, title_id: str, asset_id: str,
+             if source is None or sha256_file(Path(source.path)) != source_hash:
+                 raise ValueError("Source changed while the revision was being saved.")
+             digest = sha256_file(path)
++            source_prov_row = session.scalar(select(ProvenanceRow).where(ProvenanceRow.asset_id == asset_id))
++            ai_lineage = bool(source.creator_type == "ai" or (source_prov_row and str(
++                source_prov_row.ai_classification or "").upper().startswith("AI_GENERATED")))
++            # KDP treats text created by an AI tool as AI-generated even after human editing; only
++            # content the human created is "AI-assisted" (KDP-AUD-031).
++            classification = "AI_GENERATED_HUMAN_EDITED" if ai_lineage else "HUMAN_CREATED"
+             asset = AssetRow(asset_id=asset_id_new, title_id=title_id,
+                 asset_type="chapter.revision" if is_chapter else source.asset_type,
+                 path=str(path.resolve()), version="1.0",
+-                sha256=digest, creator_type="human", creator=reviewer, source_ref=asset_id,
+-                ai_classification="AI_ASSISTED", approval_status="experimental", created_at=utcnow())
++                sha256=digest, creator_type="ai+human" if ai_lineage else "human", creator=reviewer, source_ref=asset_id,
++                ai_classification=classification, approval_status="experimental", created_at=utcnow())
+             provenance = ProvenanceRow(provenance_id=new_id("PROV"), asset_id=asset_id_new,
+                 job_id=None, provider="human", model="manual-edit",
+                 prompt_template_id="workspace/manual-content-revision", prompt_template_version="1.0",
+                 rendered_prompt_sha256=source_hash,
+                 input_references_json=json.dumps([asset_id]), input_hashes_json=json.dumps([source_hash]),
+                 context_manifest_hash=source_hash, output_hash=digest, generation_timestamp=utcnow(),
+-                human_contribution_note=reason, ai_classification="AI_ASSISTED", reviewer=reviewer)
++                human_contribution_note=reason, ai_classification=classification, reviewer=reviewer)
+             session.add_all([asset, provenance])
+             AuditEventWriter.append(session, actor_id=reviewer, action="content.manual_revision.created",
+                 entity_type="asset", entity_id=asset_id_new, correlation_id=title_id,
+diff --git a/src/kdp_pipeline/workspace/review.py b/src/kdp_pipeline/workspace/review.py
+index 7a383f9..4a0a504 100644
+--- a/src/kdp_pipeline/workspace/review.py
++++ b/src/kdp_pipeline/workspace/review.py
+@@ -161,7 +161,7 @@ def inspect_review(root: Path, kind: str, identifier: str) -> dict | None:
+             if accepted_copy:
+                 blockers.append(f"This artefact was already accepted as {accepted_copy.asset_id}.")
+             if row.asset_type in {"chapter.draft", "chapter.revision"}:
+-                match = re.search(r"chapter\.(?:draft|revision)\.(\d+)[-.]", Path(row.path).name)
++                match = re.search(r"chapter\.(?:draft|revision|revise)\.(\d+)[-.]", Path(row.path).name)
+                 chapter_number = int(match.group(1)) if match else None
+                 if chapter_number is None:
+                     blockers.append("The chapter number cannot be determined from the artefact path.")

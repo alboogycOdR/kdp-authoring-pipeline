@@ -1,0 +1,32 @@
+[
+  {
+    "titles": 1,
+    "chapters_per_title": 10,
+    "words_per_chapter": 3000,
+    "setup_s": 2.7,
+    "home_page_snapshot_s": 0.309,
+    "snapshot_peak_mb": 4.9,
+    "doctor_s": 0.018,
+    "build_one_title_s": 0.044
+  },
+  {
+    "titles": 5,
+    "chapters_per_title": 10,
+    "words_per_chapter": 3000,
+    "setup_s": 13.1,
+    "home_page_snapshot_s": 1.24,
+    "snapshot_peak_mb": 9.9,
+    "doctor_s": 0.027,
+    "build_one_title_s": 0.031
+  },
+  {
+    "titles": 15,
+    "chapters_per_title": 10,
+    "words_per_chapter": 3000,
+    "setup_s": 40.4,
+    "home_page_snapshot_s": 4.304,
+    "snapshot_peak_mb": 12.8,
+    "doctor_s": 0.058,
+    "build_one_title_s": 0.045
+  }
+]

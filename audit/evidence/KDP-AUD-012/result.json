@@ -1,0 +1,24 @@
+{
+  "injected_text_sent_to_model": true,
+  "canon_proposals_decided": 0,
+  "doctor_non_ok": [
+    {
+      "status": "WARN",
+      "check": "provider-selection:PRJ-20260929-D070C561",
+      "message": "no provider selected",
+      "recommended_action": "Select an enabled provider profile before running generation."
+    },
+    {
+      "status": "WARN",
+      "check": "usage.pricing",
+      "message": "6 usage event(s) have unknown cost",
+      "recommended_action": "Configure model pricing or accept that these costs cannot be budgeted."
+    },
+    {
+      "status": "FAIL",
+      "check": "canon:BK-20260929-2C5FEC0B:entities.json",
+      "message": "canon file changed outside the CanonProposal workflow",
+      "recommended_action": "Restore the canon file or record the change through an approved proposal; continuity analysis reads it."
+    }
+  ]
+}

@@ -1,0 +1,54 @@
+{
+  "chapter_text": "# Chapter One\n\n[ SCRIPTURE NEEDED ]\n\n\u3010SCRIPTURE NEEDED\u3011\n\n[SCRIPTURE\nNEEDED]\n\n[SCRIPTURE NEEDED: John 3:16]\n\n[SCRIPTURE\u00a0NEEDED]\n\nTODO: write ending\n\nLorem ipsum dolor sit amet.\n\n[TK]\n",
+  "blockers": [
+    {
+      "type": "scripture_placeholder",
+      "asset_id": "AST-20260929-29400048",
+      "locator": "chapter-001:line-0003",
+      "text": "[ SCRIPTURE NEEDED ]"
+    },
+    {
+      "type": "scripture_placeholder",
+      "asset_id": "AST-20260929-29400048",
+      "locator": "chapter-001:line-0005",
+      "text": "\u3010SCRIPTURE NEEDED\u3011"
+    },
+    {
+      "type": "scripture_placeholder",
+      "asset_id": "AST-20260929-29400048",
+      "locator": "chapter-001:line-0007",
+      "text": "[SCRIPTURE\nNEEDED]"
+    },
+    {
+      "type": "scripture_placeholder",
+      "asset_id": "AST-20260929-29400048",
+      "locator": "chapter-001:line-0010",
+      "text": "[SCRIPTURE NEEDED: John 3:16]"
+    },
+    {
+      "type": "scripture_placeholder",
+      "asset_id": "AST-20260929-29400048",
+      "locator": "chapter-001:line-0012",
+      "text": "[SCRIPTURE\u00a0NEEDED]"
+    },
+    {
+      "type": "unfinished_text",
+      "asset_id": "AST-20260929-29400048",
+      "locator": "chapter-001:line-0013",
+      "text": "TODO"
+    },
+    {
+      "type": "unfinished_text",
+      "asset_id": "AST-20260929-29400048",
+      "locator": "chapter-001:line-0016",
+      "text": "Lorem ipsum"
+    },
+    {
+      "type": "unfinished_text",
+      "asset_id": "AST-20260929-29400048",
+      "locator": "chapter-001:line-0018",
+      "text": "[TK]"
+    }
+  ],
+  "status": "blocked"
+}

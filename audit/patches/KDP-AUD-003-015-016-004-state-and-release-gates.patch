@@ -1,0 +1,228 @@
+diff --git a/src/kdp_pipeline/chapter/service.py b/src/kdp_pipeline/chapter/service.py
+index 3b53e04..af82141 100644
+--- a/src/kdp_pipeline/chapter/service.py
++++ b/src/kdp_pipeline/chapter/service.py
+@@ -256,7 +256,15 @@ def accept_chapter(
+     finding_ids: list[str] | None = None,
+     proposal_ids: list[str] | None = None,
+     conditions: list[str] | None = None,
++    supersede: bool = False,
++    supersede_reason: str | None = None,
+ ) -> ChapterAcceptanceResult:
++    """Accept one experimental chapter version.
++
++    ``supersede=True`` explicitly replaces the currently accepted chapter for ``chapter_number``:
++    the old accepted file is archived under ``12_archive/``, its asset row is marked ``superseded``
++    and the replacement gets a fresh approval (KDP-AUD-004). Never implicit.
++    """
+     if chapter_number < 1:
+         raise ChapterAcceptanceError("chapter_number must be positive")
+     if not reviewer.strip():
+@@ -271,6 +279,12 @@ def accept_chapter(
+                 raise ChapterAcceptanceError("Only an experimental chapter asset can be accepted")
+             if source.asset_type not in {ChapterAssetKind.DRAFT.value, ChapterAssetKind.REVISION.value}:
+                 raise ChapterAcceptanceError("Asset is not a chapter draft or revision")
++            source_number = re.search(r"chapter\.(?:draft|revision|revise)\.(\d+)[-.]", Path(source.path).name)
++            if source_number is None or int(source_number.group(1)) != chapter_number:
++                raise ChapterAcceptanceError("Chapter number does not match the source draft (KDP-AUD-016)")
++            owning_title = session.get(TitleRow, source.title_id)
++            if owning_title is None or owning_title.status != TitleState.DRAFTING.value:
++                raise ChapterAcceptanceError("Chapter acceptance requires the title to be in DRAFTING")
+             source_path = Path(source.path)
+             if not source_path.is_file() or sha256_file(source_path) != source.sha256:
+                 raise ChapterAcceptanceError("Source file/hash integrity check failed")
+@@ -314,7 +328,21 @@ def accept_chapter(
+                     session.commit()
+                     return ChapterAcceptanceResult(source, existing, existing_approval, existing_path)
+                 raise ChapterAcceptanceError("An accepted chapter already exists with conflicting destination or hash")
+-            if destination.exists():
++            superseded_row = None
++            if destination.exists() and supersede:
++                if not (supersede_reason and supersede_reason.strip()):
++                    raise ChapterAcceptanceError("Superseding an accepted chapter requires a reason")
++                superseded_row = session.scalar(select(AssetRow).where(
++                    AssetRow.title_id == title.title_id, AssetRow.asset_type == ChapterAssetKind.ACCEPTED.value,
++                    AssetRow.approval_status == "accepted", AssetRow.path == str(destination.resolve())))
++                if superseded_row is None or sha256_file(destination) != superseded_row.sha256:
++                    raise ChapterAcceptanceError("Accepted chapter destination does not match its accepted record")
++                archive = destination.parents[2] / "12_archive" / "accepted-chapters" / f"{superseded_row.asset_id}-{destination.name}"
++                archive.parent.mkdir(parents=True, exist_ok=True)
++                shutil.move(str(destination), archive)
++                superseded_row.approval_status = "superseded"
++                superseded_row.path = str(archive.resolve())
++            elif destination.exists():
+                 if sha256_file(destination) != source.sha256:
+                     raise ChapterAcceptanceError("Accepted chapter destination exists with a conflicting hash")
+                 raise ChapterAcceptanceError("Accepted chapter destination exists without matching accepted state")
+@@ -359,6 +387,8 @@ def accept_chapter(
+                 "destination_path": str(destination), "approval_id": approval.approval_id,
+                 "reviewer": reviewer, "finding_ids": finding_ids or [], "proposal_ids": proposal_ids or [],
+                 "provenance_id": accepted_provenance.provenance_id, "conditions": conditions,
++                "superseded_asset_id": superseded_row.asset_id if superseded_row else None,
++                "supersede_reason": supersede_reason if superseded_row else None,
+             }
+             AuditEventWriter.append(session, actor_id=reviewer, action="chapter.accepted", entity_type="asset", entity_id=accepted.asset_id,
+                                     correlation_id=source.title_id, result="success", before_hash=source.sha256, after_hash=output_hash, metadata=metadata)
+diff --git a/src/kdp_pipeline/cli/app.py b/src/kdp_pipeline/cli/app.py
+index 86d73ef..0ac5e31 100644
+--- a/src/kdp_pipeline/cli/app.py
++++ b/src/kdp_pipeline/cli/app.py
+@@ -840,9 +840,12 @@ def chapter_revise(title_id: str, chapter_number: int, asset_id: str = typer.Opt
+ 
+ 
+ @chapter_app.command("accept")
+-def chapter_accept(title_id: str, chapter_number: int, asset_id: str = typer.Option(...), reviewer: str = typer.Option(...), root: Path | None = typer.Option(None)):
++def chapter_accept(title_id: str, chapter_number: int, asset_id: str = typer.Option(...), reviewer: str = typer.Option(...),
++                   supersede_reason: str | None = typer.Option(None, help="Explicitly replace the accepted chapter; the old version is archived"),
++                   root: Path | None = typer.Option(None)):
+     try:
+-        result = accept_chapter(_root(root), asset_id, chapter_number=chapter_number, reviewer=reviewer)
++        result = accept_chapter(_root(root), asset_id, chapter_number=chapter_number, reviewer=reviewer,
++                                supersede=supersede_reason is not None, supersede_reason=supersede_reason)
+     except (OSError, ValueError) as e:
+         typer.echo(f"Error: {e}", err=True)
+         raise typer.Exit(code=2)
+@@ -996,6 +999,17 @@ def inspect_lifecycle(title_id: str, root: Path | None = typer.Option(None)):
+         raise typer.Exit(code=2)
+ 
+ 
++@app.command("relocate")
++def relocate(old_root: str = typer.Option(..., "--from", help="Absolute root the database was created under"),
++             dry_run: bool = typer.Option(False, "--dry-run"), root: Path | None = typer.Option(None)):
++    """Rebase stored absolute paths after a restore to a new location; verifies every hash first."""
++    from kdp_pipeline.storage.relocate import relocate_workspace
++    result = relocate_workspace(_root(root), old_root, dry_run=dry_run)
++    typer.echo(json.dumps(result, indent=2))
++    if result["verification_failures"]:
++        raise typer.Exit(code=2)
++
++
+ @app.command("doctor")
+ def doctor(root: Path | None = typer.Option(None)):
+     for check in run_doctor(_root(root)):
+diff --git a/src/kdp_pipeline/release/service.py b/src/kdp_pipeline/release/service.py
+index 388c31e..2dbee22 100644
+--- a/src/kdp_pipeline/release/service.py
++++ b/src/kdp_pipeline/release/service.py
+@@ -26,6 +26,9 @@ _DOMAINS = {"metadata": set(METADATA_CHECKS), "kdp": set(KDP_CHECKS),
+ _CHECK_DECISIONS = {"complete", "not_applicable"}
+ _REVIEW_DECISIONS = {"approve", "hold", "reject"}
+ _MANUAL_PUBLICATION_CONDITION = "KDP upload and publication remain manual human-controlled actions."
++# A release cannot be approved while the title is held or already past submission (KDP-AUD-015).
++_NON_RELEASABLE_STATES = {"RIGHTS_HOLD", "POLICY_HOLD", "KDP_EXCEPTION", "HUMAN_SUBMITTED", "IN_REVIEW",
++                          "LIVE", "MONITORING", "UPDATE_ASSESSMENT"}
+ 
+ 
+ def _blocker_identity(blocker: dict) -> tuple:
+@@ -195,7 +198,9 @@ def create_release_candidate(root: Path, *, title_id: str, build_id: str,
+                 "ai_classification": provenance.ai_classification if provenance else None,
+                 "disclosure_decision": provenance.disclosure_decision if provenance else None})
+         ai_summary = {"assets": provenance_summary,
+-            "ai_asset_count": sum(item["creator_type"] == "ai" for item in provenance_summary),
++            "ai_asset_count": sum(item["creator_type"] in {"ai", "ai+human"}
++                                  or str(item["ai_classification"] or "").upper().startswith("AI_GENERATED")
++                                  for item in provenance_summary),
+             "status": "pending_human_disclosure"}
+         metadata_checks = {key: {"status": "pending", "evidence_reference": None,
+                                  "rationale": None, "reviewer": None, "value": None}
+@@ -299,6 +304,19 @@ def review_release_candidate(root: Path, candidate_id: str, *, decision: str,
+         if row.status in {"approved_for_manual_kdp_action", "rejected"}:
+             raise ValueError("Release candidate has already reached a terminal review state")
+         blockers = _blockers(session, row)
++        if decision == "approve":
++            title = session.get(TitleRow, row.title_id)
++            if title is not None and title.status in _NON_RELEASABLE_STATES:
++                blockers = blockers + [{"type": "title_state", "status": title.status}]
++            preparers = {row.created_by.strip().casefold()} | {
++                (json.loads(value) or {}).get("reviewer", "").strip().casefold()
++                for value in [row.ai_disclosure_json] if value} | {
++                (check or {}).get("reviewer", "").strip().casefold()
++                for column in (row.metadata_checks_json, row.kdp_checks_json)
++                for check in json.loads(column or "{}").values()}
++            if reviewer.strip().casefold() in preparers - {""}:
++                blockers = blockers + [{"type": "segregation_of_duties",
++                                        "detail": "approver prepared or checked this candidate"}]
+         if decision == "approve" and blockers:
+             row.status = "blocked"
+             AuditEventWriter.append(session, actor_id=reviewer.strip(), action="release.candidate.approval_blocked",
+diff --git a/src/kdp_pipeline/storage/service.py b/src/kdp_pipeline/storage/service.py
+index 69bb47e..58468fb 100644
+--- a/src/kdp_pipeline/storage/service.py
++++ b/src/kdp_pipeline/storage/service.py
+@@ -102,8 +102,11 @@ def create_project(root: Path, name: str, language: str = "en", actor_id: str =
+                 write_json(workspace / "project.json", _project_snapshot(row))
+             except Exception:
+                 session.rollback()
+-                session.execute(delete(AuditEventRow).where(AuditEventRow.entity_id == project_id))
+                 session.execute(delete(ProjectRow).where(ProjectRow.project_id == project_id))
++                # Append-only audit: record the compensation instead of deleting history (KDP-AUD-021).
++                AuditEventWriter.append(session, actor_id=actor_id, action="project.create.rolled_back",
++                                        entity_type="project", entity_id=project_id, correlation_id=project_id,
++                                        result="failed", metadata={"reason": "snapshot write failed"})
+                 session.commit()
+                 raise
+             return row
+@@ -146,8 +149,11 @@ def create_title(root: Path, project_id: str, working_title: str, language: str
+                 write_json(workspace / "00_admin" / "title.json", _title_snapshot(row))
+             except Exception:
+                 session.rollback()
+-                session.execute(delete(AuditEventRow).where(AuditEventRow.entity_id == title_id))
+                 session.execute(delete(TitleRow).where(TitleRow.title_id == title_id))
++                # Append-only audit: record the compensation instead of deleting history (KDP-AUD-021).
++                AuditEventWriter.append(session, actor_id=actor_id, action="title.create.rolled_back",
++                                        entity_type="title", entity_id=title_id, correlation_id=title_id,
++                                        result="failed", metadata={"reason": "snapshot write failed"})
+                 session.commit()
+                 raise
+             return row
+@@ -218,6 +224,28 @@ def planning_requirements_met(root: Path, title_id: str) -> bool:
+         return _planning_requirements_met(session, root, title_id)
+ 
+ 
++def _require_release_evidence(session: Session, title_id: str, target: TitleState) -> None:
++    """Release-side states must be backed by recorded evidence, not by a bare transition (KDP-AUD-003)."""
++    if target not in {TitleState.ASSET_READY, TitleState.PREFLIGHT_PASSED, TitleState.KDP_DRAFT_READY}:
++        return
++    from kdp_pipeline.release.service import _blockers
++    from kdp_pipeline.storage.db import ManuscriptBuildRow, ReleaseCandidateRow
++    if target == TitleState.ASSET_READY:
++        built = session.scalar(select(ManuscriptBuildRow).where(
++            ManuscriptBuildRow.title_id == title_id, ManuscriptBuildRow.status == "built"))
++        if built is None:
++            raise ValueError("Cannot transition to ASSET_READY: no unblocked manuscript build exists")
++        return
++    candidates = list(session.scalars(select(ReleaseCandidateRow).where(ReleaseCandidateRow.title_id == title_id)))
++    if target == TitleState.PREFLIGHT_PASSED:
++        if not any(not _blockers(session, candidate) for candidate in candidates):
++            raise ValueError("Cannot transition to PREFLIGHT_PASSED: no release candidate is free of blockers")
++        return
++    if not any(candidate.status == "approved_for_manual_kdp_action" and not _blockers(session, candidate)
++               for candidate in candidates):
++        raise ValueError("Cannot transition to KDP_DRAFT_READY: no approved, unblocked release candidate exists")
++
++
+ def transition_title(root: Path, title_id: str, target: TitleState, actor_id: str = "cli-user") -> TitleRow:
+     with session_scope(root) as session:
+         row = session.get(TitleRow, title_id)
+@@ -227,6 +255,7 @@ def transition_title(root: Path, title_id: str, target: TitleState, actor_id: st
+         require_transition(current, target)
+         if target == TitleState.PLANNED and not _planning_requirements_met(session, root, title_id):
+             raise ValueError("Cannot transition to PLANNED: required accepted planning artefacts are incomplete")
++        _require_release_evidence(session, title_id, target)
+         before = row.status
+         row.status = target.value
+         AuditEventWriter.append(
+diff --git a/tests/integration/test_sprint16_workspace_review.py b/tests/integration/test_sprint16_workspace_review.py
+index 032a676..f22a5b7 100644
+--- a/tests/integration/test_sprint16_workspace_review.py
++++ b/tests/integration/test_sprint16_workspace_review.py
+@@ -255,7 +255,8 @@ def test_release_approval_requires_every_human_check_and_keeps_manual_publicatio
+             run_release_check(tmp_path, candidate.candidate_id, {
+                 "review_hash": current["review_hash"], "confirm_consequences": "yes",
+                 "domain": domain, "key": key, "decision": "complete",
+-                "reviewer": "human-reviewer", "rationale": "Checked against current evidence.",
++                # The approver must differ from the checklist reviewer (segregation of duties, KDP-AUD-015).
++                "reviewer": "checklist-reviewer", "rationale": "Checked against current evidence.",
+                 "evidence_reference": "human-review-record",
+                 "statement": "Human-reviewed AI use disclosure." if domain == "ai_disclosure" else "",
+             })

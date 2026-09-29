@@ -19,7 +19,9 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode
 
-REPO = Path(__file__).resolve().parents[2]
+import os
+
+REPO = Path(os.environ.get("KDP_AUDIT_TARGET", Path(__file__).resolve().parents[2])).resolve()
 
 from kdp_pipeline.chapter import ChapterService, accept_chapter  # noqa: E402
 from kdp_pipeline.context import ContextManifest  # noqa: E402
@@ -37,7 +39,7 @@ from kdp_pipeline.storage.service import (  # noqa: E402
 from kdp_pipeline.workspace.server import create_workspace_server  # noqa: E402
 
 CANARY_KEY = "sk-CANARY-" + "A1b2C3d4E5f6G7h8I9j0"
-CANARY_CLOUD = "AKIACANARY" + "0000CLOUDSECRETxyz"
+CANARY_CLOUD = "canary-cloud-secret-" + "not-a-real-credential-0000"
 CANARY_NOTE = "KDP-PASSWORD-CANARY-7731 bank IBAN ZA00CANARY000 MFA 424242"
 
 

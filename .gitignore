@@ -14,3 +14,9 @@ projects/*
 
 # Generated local operator reports
 reports/
+
+# Audit tooling byproducts
+.coverage
+build/
+dist/
+*.egg-info/

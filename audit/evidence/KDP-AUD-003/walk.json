@@ -1,0 +1,8 @@
+{
+  "reached": [
+    "EDITING",
+    "refused ASSET_READY: Cannot transition to ASSET_READY: no unblocked manuscript build exists"
+  ],
+  "builds": 0,
+  "release_candidates": 0
+}

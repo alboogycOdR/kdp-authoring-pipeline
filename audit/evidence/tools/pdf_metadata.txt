@@ -1,0 +1,15 @@
+bytes 111427
+b'%PDF-1.4\n'
+/Producer b'ReportLab PDF Library - \\(opensource\\'
+/Creator b'anonymous'
+/Author b'KDP Pipeline'
+/Title b'KDP Pipeline - Book Creator Companion Guide'
+/CreationDate b"D:20260929114404+02'00'"
+/ModDate b"D:20260929114404+02'00'"
+pages 8
+b'C:\\\\\\\\' 0
+b'Users' 0
+b'clawsrv' 0
+b'100\\.78' 0
+b'sk-' 0
+b'gpt-5' 0

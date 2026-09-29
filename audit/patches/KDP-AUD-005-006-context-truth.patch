@@ -1,0 +1,232 @@
+diff --git a/prompts/editorial/developmental-v1.1.md b/prompts/editorial/developmental-v1.1.md
+new file mode 100644
+index 0000000..757418b
+--- /dev/null
++++ b/prompts/editorial/developmental-v1.1.md
+@@ -0,0 +1,9 @@
++# Developmental editorial pass
++
++Title: {{ working_title }}
++Title ID: {{ title_id }}
++Chapter: {{ chapter_number }}
++
++Identify developmental findings about structure, pacing, purpose, beats, and resolution for the target chapter draft below, judged against the accepted planning context. Return findings, not replacement prose. If the target chapter draft is absent from the context below, say so explicitly instead of guessing.
++
++{{chapter_context}}
+diff --git a/prompts/planning/book-brief-v1.1.md b/prompts/planning/book-brief-v1.1.md
+new file mode 100644
+index 0000000..8a77fc5
+--- /dev/null
++++ b/prompts/planning/book-brief-v1.1.md
+@@ -0,0 +1,12 @@
++# Book brief
++
++Title: {{ working_title }}
++Title ID: {{ title_id }}
++Target reader: {{ target_reader }}
++
++Produce an experimental book brief covering the concept, reader promise, scope, tone, and success criteria. Use only supplied context.
++
++
++Accepted context supplied for this request (operator idea, accepted concept brief, and previously accepted planning artefacts). Use it; do not contradict it silently.
++
++{{planning_context}}
+diff --git a/prompts/planning/chapter-card-v1.1.md b/prompts/planning/chapter-card-v1.1.md
+new file mode 100644
+index 0000000..bc77832
+--- /dev/null
++++ b/prompts/planning/chapter-card-v1.1.md
+@@ -0,0 +1,13 @@
++# Chapter card
++
++Title: {{ working_title }}
++Title ID: {{ title_id }}
++Target reader: {{ target_reader }}
++Chapter number: {{ chapter_number }}
++
++Produce an experimental chapter card containing purpose, reader outcome, key beats, and continuity considerations. Use only supplied context.
++
++
++Accepted context supplied for this request (operator idea, accepted concept brief, and previously accepted planning artefacts). Use it; do not contradict it silently.
++
++{{planning_context}}
+diff --git a/prompts/planning/outline-v1.1.md b/prompts/planning/outline-v1.1.md
+new file mode 100644
+index 0000000..4a1960c
+--- /dev/null
++++ b/prompts/planning/outline-v1.1.md
+@@ -0,0 +1,12 @@
++# Outline
++
++Title: {{ working_title }}
++Title ID: {{ title_id }}
++Target reader: {{ target_reader }}
++
++Produce an experimental book outline with a coherent sequence of sections or chapters. Use only supplied context.
++
++
++Accepted context supplied for this request (operator idea, accepted concept brief, and previously accepted planning artefacts). Use it; do not contradict it silently.
++
++{{planning_context}}
+diff --git a/prompts/planning/positioning-brief-v1.1.md b/prompts/planning/positioning-brief-v1.1.md
+new file mode 100644
+index 0000000..c78f426
+--- /dev/null
++++ b/prompts/planning/positioning-brief-v1.1.md
+@@ -0,0 +1,12 @@
++# Positioning brief
++
++Title: {{ working_title }}
++Title ID: {{ title_id }}
++Target reader: {{ target_reader }}
++
++Produce an experimental positioning brief identifying the audience, promise, differentiator, and comparable market position. Use only supplied context.
++
++
++Accepted context supplied for this request (operator idea, accepted concept brief, and previously accepted planning artefacts). Use it; do not contradict it silently.
++
++{{planning_context}}
+diff --git a/src/kdp_pipeline/editorial/service.py b/src/kdp_pipeline/editorial/service.py
+index a7cf8e3..95f607c 100644
+--- a/src/kdp_pipeline/editorial/service.py
++++ b/src/kdp_pipeline/editorial/service.py
+@@ -38,7 +38,7 @@ class StructuredEditorialRunResult:
+ 
+ STRUCTURED_PASSES = {"voice", "line", "copy", "reader-experience", "consistency"}
+ _MISSING_CONTEXT = re.compile(r"(resend|provide|supply|need).{0,50}(chapter|draft|context|card|brief|outline)|\bno (chapter|draft|context) (text|was|provided|available)", re.I | re.S)
+-_CHAPTER_SOURCE_NUMBER = re.compile(r"chapter\.(?:draft|revision)\.(?P<number>\d+)-", re.I)
++_CHAPTER_SOURCE_NUMBER = re.compile(r"chapter\.(?:draft|revision|revise)\.(?P<number>\d+)-", re.I)
+ 
+ 
+ def _parse_structured_output(text: str) -> StructuredEditorialOutput:
+@@ -95,7 +95,7 @@ class StructuredEditorialService:
+             manifest, chapter_context = _chapter_authoring_context(session, title_id, chapter_number, manifest)
+             variables = {"title_id": title_id, "working_title": title.working_title,
+                          "chapter_number": str(chapter_number), "chapter_context": chapter_context}
+-        prompt = PromptRegistry(root / "prompts").render(f"editorial/{pass_type}", variables)
++        prompt = PromptRegistry(root / "prompts").render(f"editorial/{pass_type}", variables, template_version="1.0")
+         generation = await GenerationService.generate(root, title_id=title_id,
+             task_type=f"chapter.editorial.{pass_type}.{chapter_number}", rendered_prompt=prompt,
+             context_manifest=manifest, provider=provider,
+@@ -185,11 +185,20 @@ class EditorialService:
+                 raise ValueError("Unknown title or source chapter asset")
+             if title.status != "DRAFTING":
+                 raise ValueError("Developmental editing requires DRAFTING state")
+-            if source.approval_status != "experimental":
++            if source.approval_status != "experimental" or source.asset_type not in {"chapter.draft", "chapter.revision"}:
+                 raise ValueError("Developmental editing requires an experimental chapter asset")
+-            manifest = _planning_context(session, title_id, source, chapter_number)
+-            title_values = {"title_id": title_id, "working_title": title.working_title, "chapter_number": str(chapter_number)}
+-        prompt = PromptRegistry(root / "prompts").render("editorial/developmental", title_values)
++            card = _accepted_chapter_card(session, title_id, chapter_number)
++            if card is None:
++                raise ValueError(f"Accepted chapter card not found for chapter {chapter_number}")
++            base = _planning_context(session, title_id, card, chapter_number)
++            manifest = ContextManifest(title_id=title_id, task_type=f"editorial.developmental.{chapter_number}",
++                inputs=base.inputs + [ContextInput(input_ref=source.asset_id, sha256=source.sha256,
++                                                   context_tier="A", role="target_chapter_draft")])
++            # The manifest must describe exactly what is sent (KDP-AUD-005): render the same inputs.
++            manifest, chapter_context = _chapter_authoring_context(session, title_id, chapter_number, manifest)
++            title_values = {"title_id": title_id, "working_title": title.working_title,
++                            "chapter_number": str(chapter_number), "chapter_context": chapter_context}
++        prompt = PromptRegistry(root / "prompts").render("editorial/developmental", title_values, template_version="1.1")
+         generation = await GenerationService.generate(
+             root, title_id=title_id, task_type=f"chapter.editorial.developmental.{chapter_number}",
+             rendered_prompt=prompt, context_manifest=manifest, provider=provider,
+diff --git a/src/kdp_pipeline/planning/service.py b/src/kdp_pipeline/planning/service.py
+index 52539f6..3cf32cd 100644
+--- a/src/kdp_pipeline/planning/service.py
++++ b/src/kdp_pipeline/planning/service.py
+@@ -3,7 +3,9 @@ from __future__ import annotations
+ from pathlib import Path
+ from typing import Any
+ 
+-from kdp_pipeline.context import ContextManifest
++from sqlalchemy import select
++
++from kdp_pipeline.context import ContextInput, ContextManifest
+ from kdp_pipeline.generation import GenerationRunResult, GenerationService
+ from kdp_pipeline.models.planning import PlanningArtifactKind, spec_for
+ from kdp_pipeline.prompts import PromptRegistry
+@@ -13,6 +15,40 @@ from kdp_pipeline.storage.files import sha256_file
+ from kdp_pipeline.storage.service import session_scope
+ 
+ 
++_PLANNING_ORDER = (PlanningArtifactKind.POSITIONING, PlanningArtifactKind.BOOK_BRIEF,
++                   PlanningArtifactKind.OUTLINE, PlanningArtifactKind.CHAPTER_CARD)
++
++
++def _accepted_planning_context(session, title_id: str, kind: PlanningArtifactKind,
++                               manifest: ContextManifest) -> tuple[ContextManifest, str]:
++    """Send the accepted upstream artefacts to the model and record them in the manifest (KDP-AUD-006).
++
++    Upstream = the operator idea note, the accepted concept brief, and every accepted planning
++    artefact earlier in the chain than ``kind`` (a chapter card also receives the outline).
++    Files are integrity-checked; a mismatch fails the request instead of silently dropping context.
++    """
++    wanted = ["concept.idea-note", "concept.brief"] + [
++        spec_for(k).asset_type for k in _PLANNING_ORDER[:_PLANNING_ORDER.index(kind)]]
++    inputs, sections = list(manifest.inputs), []
++    for asset_type in wanted:
++        query = select(AssetRow).where(AssetRow.title_id == title_id, AssetRow.asset_type == asset_type)
++        if asset_type != "concept.idea-note":
++            query = query.where(AssetRow.approval_status == "accepted")
++        asset = session.scalar(query.order_by(AssetRow.created_at.desc()))
++        if asset is None:
++            continue
++        if asset_type != "concept.idea-note" and session.scalar(select(ApprovalRow).where(
++                ApprovalRow.asset_id == asset.asset_id, ApprovalRow.decision == "accepted")) is None:
++            continue
++        path = Path(asset.path)
++        if not path.is_file() or sha256_file(path) != asset.sha256:
++            raise ValueError(f"Planning context file/hash integrity check failed: {asset.asset_id}")
++        inputs.append(ContextInput(input_ref=asset.asset_id, sha256=asset.sha256, context_tier="A", role=asset_type))
++        sections.append(f"## {asset_type} (asset {asset.asset_id})\n{path.read_text(encoding='utf-8')}")
++    text = "\n\n".join(sections) if sections else "No accepted upstream context exists yet."
++    return ContextManifest(title_id=manifest.title_id, task_type=manifest.task_type, inputs=inputs), text
++
++
+ class PlanningService:
+     @staticmethod
+     async def generate(
+@@ -58,10 +94,14 @@ class PlanningService:
+                 "chapter_number": str(chapter_number or ""),
+             }
+ 
++            context_manifest, planning_context = _accepted_planning_context(
++                session, title_id, artifact_kind, context_manifest)
++
+         spec = spec_for(artifact_kind)
+         prompt = PromptRegistry(root / "prompts").render(
+             spec.template_id,
+-            {**title_values, **(variables or {})},
++            {**title_values, "planning_context": planning_context, **(variables or {})},
++            template_version="1.1",
+         )
+         task_type = f"planning.{artifact_kind.value}"
+         if chapter_number is not None:
+diff --git a/tests/integration/test_sprint65_editorial_defaults.py b/tests/integration/test_sprint65_editorial_defaults.py
+index ed54d23..8a9640b 100644
+--- a/tests/integration/test_sprint65_editorial_defaults.py
++++ b/tests/integration/test_sprint65_editorial_defaults.py
+@@ -91,7 +91,7 @@ def test_developmental_editorial_uses_profile_default_or_explicit_override(tmp_p
+         "model": "gpt-5",
+         "max_output_tokens": expected,
+         "prompt_template_id": "editorial/developmental",
+-        "prompt_template_version": "1.0",
++        "prompt_template_version": "1.1",  # developmental v1.1 carries the chapter (KDP-AUD-005)
+         "reasoning_effort": "low",
+         "timeouts_seconds": {"connect": 60.0, "read": 180.0, "write": 60.0, "pool": 60.0},
+     }
+diff --git a/tests/unit/test_planning_contracts.py b/tests/unit/test_planning_contracts.py
+index 9d9db48..bc0e961 100644
+--- a/tests/unit/test_planning_contracts.py
++++ b/tests/unit/test_planning_contracts.py
+@@ -15,6 +15,7 @@ def test_planning_prompt_registry_renders_versioned_prompt():
+     prompt = PromptRegistry(Path("prompts")).render(
+         "planning/positioning-brief",
+         {"title_id": "BK-1", "working_title": "Test", "target_reader": "Readers", "chapter_number": ""},
++        template_version="1.0",  # v1.1 (with planning context) now coexists (KDP-AUD-006)
+     )
+     assert prompt.template_version == "1.0"
+     assert prompt.rendered_sha256

@@ -52,6 +52,7 @@ def test_config_defaults_and_from_env(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "test-secret")
     monkeypatch.setenv("OPENAI_BASE_URL", "https://local.example/v1/")
     monkeypatch.setenv("OPENAI_MODEL", "local-model")
+    monkeypatch.setenv("KDP_PROVIDER_HOST_ALLOWLIST", "local.example")
     from_env = OpenAICompatibleConfig.from_env()
     assert from_env.base_url == "https://local.example/v1"
     assert from_env.model == "local-model"
@@ -191,6 +192,7 @@ def test_configured_official_reasoning_effort_is_sent_for_reasoning_models(monke
 
 def test_reasoning_effort_is_omitted_for_non_reasoning_or_compatible_endpoint(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "test-secret")
+    monkeypatch.setenv("KDP_PROVIDER_HOST_ALLOWLIST", "compatible.example")
     payloads = []
 
     async def handler(request: httpx.Request):
@@ -210,6 +212,40 @@ def test_reasoning_effort_is_omitted_for_non_reasoning_or_compatible_endpoint(mo
     finally:
         run(client.aclose())
     assert all("reasoning_effort" not in payload for payload in payloads)
+
+
+def test_direct_provider_config_enforces_exact_host_allowlist(monkeypatch):
+    monkeypatch.setenv("KDP_PROVIDER_HOST_ALLOWLIST", "trusted-provider.example")
+    with pytest.raises(ValidationError, match="KDP_PROVIDER_HOST_ALLOWLIST"):
+        OpenAICompatibleConfig(model="test-model", base_url="https://untrusted-provider.example/v1")
+    allowed = OpenAICompatibleConfig(model="test-model", base_url="https://trusted-provider.example/v1")
+    assert allowed.base_url == "https://trusted-provider.example/v1"
+    with pytest.raises(ValidationError, match="loopback"):
+        OpenAICompatibleConfig(model="test-model", base_url="http://trusted-provider.example/v1")
+
+
+@pytest.mark.parametrize("declared_length", [True, False], ids=["content-length", "chunked"])
+def test_response_size_cap_is_portable_and_enforced_before_parsing(monkeypatch, declared_length):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-secret")
+    monkeypatch.setattr("kdp_pipeline.providers.openai_compatible.MAX_RESPONSE_BYTES", 128)
+
+    class OversizedStream(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            yield b"x" * 80
+            yield b"y" * 80
+
+    async def handler(request: httpx.Request):
+        if declared_length:
+            return httpx.Response(200, headers={"Content-Length": "129"}, content=b"")
+        return httpx.Response(200, headers={"Content-Type": "application/json"}, stream=OversizedStream())
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    provider = OpenAICompatibleProvider(OpenAICompatibleConfig(model="test-model"), client=client)
+    try:
+        with pytest.raises(ProviderResponseError, match="maximum accepted size"):
+            run(provider.generate(make_request()))
+    finally:
+        run(client.aclose())
 
 
 def test_openai_compatible_config_rejects_unknown_reasoning_effort():

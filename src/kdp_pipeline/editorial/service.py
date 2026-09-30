@@ -38,7 +38,7 @@ class StructuredEditorialRunResult:
 
 STRUCTURED_PASSES = {"voice", "line", "copy", "reader-experience", "consistency"}
 _MISSING_CONTEXT = re.compile(r"(resend|provide|supply|need).{0,50}(chapter|draft|context|card|brief|outline)|\bno (chapter|draft|context) (text|was|provided|available)", re.I | re.S)
-_CHAPTER_SOURCE_NUMBER = re.compile(r"chapter\.(?:draft|revision)\.(?P<number>\d+)-", re.I)
+_CHAPTER_SOURCE_NUMBER = re.compile(r"chapter\.(?:draft|revision|revise)\.(?P<number>\d+)-", re.I)
 
 
 def _parse_structured_output(text: str) -> StructuredEditorialOutput:
@@ -95,7 +95,7 @@ class StructuredEditorialService:
             manifest, chapter_context = _chapter_authoring_context(session, title_id, chapter_number, manifest)
             variables = {"title_id": title_id, "working_title": title.working_title,
                          "chapter_number": str(chapter_number), "chapter_context": chapter_context}
-        prompt = PromptRegistry(root / "prompts").render(f"editorial/{pass_type}", variables)
+        prompt = PromptRegistry(root / "prompts").render(f"editorial/{pass_type}", variables, template_version="1.0")
         generation = await GenerationService.generate(root, title_id=title_id,
             task_type=f"chapter.editorial.{pass_type}.{chapter_number}", rendered_prompt=prompt,
             context_manifest=manifest, provider=provider,
@@ -185,11 +185,20 @@ class EditorialService:
                 raise ValueError("Unknown title or source chapter asset")
             if title.status != "DRAFTING":
                 raise ValueError("Developmental editing requires DRAFTING state")
-            if source.approval_status != "experimental":
+            if source.approval_status != "experimental" or source.asset_type not in {"chapter.draft", "chapter.revision"}:
                 raise ValueError("Developmental editing requires an experimental chapter asset")
-            manifest = _planning_context(session, title_id, source, chapter_number)
-            title_values = {"title_id": title_id, "working_title": title.working_title, "chapter_number": str(chapter_number)}
-        prompt = PromptRegistry(root / "prompts").render("editorial/developmental", title_values)
+            card = _accepted_chapter_card(session, title_id, chapter_number)
+            if card is None:
+                raise ValueError(f"Accepted chapter card not found for chapter {chapter_number}")
+            base = _planning_context(session, title_id, card, chapter_number)
+            manifest = ContextManifest(title_id=title_id, task_type=f"editorial.developmental.{chapter_number}",
+                inputs=base.inputs + [ContextInput(input_ref=source.asset_id, sha256=source.sha256,
+                                                   context_tier="A", role="target_chapter_draft")])
+            # The manifest must describe exactly what is sent (KDP-AUD-005): render the same inputs.
+            manifest, chapter_context = _chapter_authoring_context(session, title_id, chapter_number, manifest)
+            title_values = {"title_id": title_id, "working_title": title.working_title,
+                            "chapter_number": str(chapter_number), "chapter_context": chapter_context}
+        prompt = PromptRegistry(root / "prompts").render("editorial/developmental", title_values, template_version="1.1")
         generation = await GenerationService.generate(
             root, title_id=title_id, task_type=f"chapter.editorial.developmental.{chapter_number}",
             rendered_prompt=prompt, context_manifest=manifest, provider=provider,

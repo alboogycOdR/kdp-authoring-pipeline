@@ -161,7 +161,7 @@ def inspect_review(root: Path, kind: str, identifier: str) -> dict | None:
             if accepted_copy:
                 blockers.append(f"This artefact was already accepted as {accepted_copy.asset_id}.")
             if row.asset_type in {"chapter.draft", "chapter.revision"}:
-                match = re.search(r"chapter\.(?:draft|revision)\.(\d+)[-.]", Path(row.path).name)
+                match = re.search(r"chapter\.(?:draft|revision|revise)\.(\d+)[-.]", Path(row.path).name)
                 chapter_number = int(match.group(1)) if match else None
                 if chapter_number is None:
                     blockers.append("The chapter number cannot be determined from the artefact path.")

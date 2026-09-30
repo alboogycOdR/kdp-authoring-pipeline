@@ -1,0 +1,21 @@
+[Unit]
+Description=KDP Pipeline loopback Caddy proxy for Tailscale Serve
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/clawusr/apps/kdp-authoring-pipeline
+EnvironmentFile=/home/clawusr/.config/kdp-workspace/proxy.env
+ExecStart=/usr/bin/caddy run --config /home/clawusr/.config/kdp-workspace/Caddyfile --adapter caddyfile
+Restart=on-failure
+RestartSec=5
+UMask=0077
+PrivateTmp=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+MemoryMax=128M
+TasksMax=32
+
+[Install]
+WantedBy=default.target

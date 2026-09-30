@@ -15,6 +15,7 @@ def test_planning_prompt_registry_renders_versioned_prompt():
     prompt = PromptRegistry(Path("prompts")).render(
         "planning/positioning-brief",
         {"title_id": "BK-1", "working_title": "Test", "target_reader": "Readers", "chapter_number": ""},
+        template_version="1.0",  # v1.1 (with planning context) now coexists (KDP-AUD-006)
     )
     assert prompt.template_version == "1.0"
     assert prompt.rendered_sha256

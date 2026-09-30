@@ -16,6 +16,7 @@ class RenderedPrompt(BaseModel):
     template_version: str
     rendered_text: str
     rendered_sha256: str
+    template_sha256: str | None = None  # hash of the template file as read (KDP-AUD-029)
 
     @model_validator(mode="after")
     def validate_hash(self) -> "RenderedPrompt":

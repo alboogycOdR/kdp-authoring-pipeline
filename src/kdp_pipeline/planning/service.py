@@ -3,7 +3,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from kdp_pipeline.context import ContextManifest
+from sqlalchemy import select
+
+from kdp_pipeline.context import ContextInput, ContextManifest
 from kdp_pipeline.generation import GenerationRunResult, GenerationService
 from kdp_pipeline.models.planning import PlanningArtifactKind, spec_for
 from kdp_pipeline.prompts import PromptRegistry
@@ -11,6 +13,40 @@ from kdp_pipeline.providers import ModelProvider
 from kdp_pipeline.storage.db import ApprovalRow, AssetRow, ConceptGateRow, TitleRow
 from kdp_pipeline.storage.files import sha256_file
 from kdp_pipeline.storage.service import session_scope
+
+
+_PLANNING_ORDER = (PlanningArtifactKind.POSITIONING, PlanningArtifactKind.BOOK_BRIEF,
+                   PlanningArtifactKind.OUTLINE, PlanningArtifactKind.CHAPTER_CARD)
+
+
+def _accepted_planning_context(session, title_id: str, kind: PlanningArtifactKind,
+                               manifest: ContextManifest) -> tuple[ContextManifest, str]:
+    """Send the accepted upstream artefacts to the model and record them in the manifest (KDP-AUD-006).
+
+    Upstream = the operator idea note, the accepted concept brief, and every accepted planning
+    artefact earlier in the chain than ``kind`` (a chapter card also receives the outline).
+    Files are integrity-checked; a mismatch fails the request instead of silently dropping context.
+    """
+    wanted = ["concept.idea-note", "concept.brief"] + [
+        spec_for(k).asset_type for k in _PLANNING_ORDER[:_PLANNING_ORDER.index(kind)]]
+    inputs, sections = list(manifest.inputs), []
+    for asset_type in wanted:
+        query = select(AssetRow).where(AssetRow.title_id == title_id, AssetRow.asset_type == asset_type)
+        if asset_type != "concept.idea-note":
+            query = query.where(AssetRow.approval_status == "accepted")
+        asset = session.scalar(query.order_by(AssetRow.created_at.desc()))
+        if asset is None:
+            continue
+        if asset_type != "concept.idea-note" and session.scalar(select(ApprovalRow).where(
+                ApprovalRow.asset_id == asset.asset_id, ApprovalRow.decision == "accepted")) is None:
+            continue
+        path = Path(asset.path)
+        if not path.is_file() or sha256_file(path) != asset.sha256:
+            raise ValueError(f"Planning context file/hash integrity check failed: {asset.asset_id}")
+        inputs.append(ContextInput(input_ref=asset.asset_id, sha256=asset.sha256, context_tier="A", role=asset_type))
+        sections.append(f"## {asset_type} (asset {asset.asset_id})\n{path.read_text(encoding='utf-8')}")
+    text = "\n\n".join(sections) if sections else "No accepted upstream context exists yet."
+    return ContextManifest(title_id=manifest.title_id, task_type=manifest.task_type, inputs=inputs), text
 
 
 class PlanningService:
@@ -58,10 +94,14 @@ class PlanningService:
                 "chapter_number": str(chapter_number or ""),
             }
 
+            context_manifest, planning_context = _accepted_planning_context(
+                session, title_id, artifact_kind, context_manifest)
+
         spec = spec_for(artifact_kind)
         prompt = PromptRegistry(root / "prompts").render(
             spec.template_id,
-            {**title_values, **(variables or {})},
+            {**title_values, "planning_context": planning_context, **(variables or {})},
+            template_version="1.1",
         )
         task_type = f"planning.{artifact_kind.value}"
         if chapter_number is not None:

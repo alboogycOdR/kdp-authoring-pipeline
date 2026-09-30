@@ -109,7 +109,7 @@ def test_workspace_server_is_loopback_read_only_and_serves_packaged_assets(tmp_p
         assert 'body[data-theme="dark"]' in css
         assert 'body[data-theme="brand"]' in css
 
-        connection.request("POST", "/")
+        connection.request("POST", "/", headers={"Sec-Fetch-Site": "same-origin"})
         response = connection.getresponse()
         assert response.status == 405
         assert response.headers.get("Allow") == "GET, HEAD"

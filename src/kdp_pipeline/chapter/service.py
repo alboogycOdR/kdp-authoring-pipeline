@@ -49,6 +49,9 @@ class ChapterAcceptanceResult:
     destination_path: Path
 
 
+_CHAPTER_NUMBER_FROM_SOURCE = re.compile(r"chapter\.(?:draft|revision|revise)\.(?P<number>\d{1,3})[-.]", re.IGNORECASE)
+
+
 def _accepted_chapter_card(session, title_id: str, chapter_number: int) -> AssetRow | None:
     rows = session.scalars(select(AssetRow).where(
         AssetRow.title_id == title_id,
@@ -256,14 +259,19 @@ def accept_chapter(
     finding_ids: list[str] | None = None,
     proposal_ids: list[str] | None = None,
     conditions: list[str] | None = None,
+    supersede: bool = False,
+    supersede_reason: str | None = None,
 ) -> ChapterAcceptanceResult:
     if chapter_number < 1:
         raise ChapterAcceptanceError("chapter_number must be positive")
     if not reviewer.strip():
         raise ChapterAcceptanceError("reviewer is required")
+    if supersede and not (supersede_reason and supersede_reason.strip()):
+        raise ChapterAcceptanceError("Superseding an accepted chapter requires a reason")
     conditions = normalize_approval_conditions(conditions)
     destination: Path | None = None
     copied = False
+    archived_path: Path | None = None
     try:
         with session_scope(root) as session:
             source = session.get(AssetRow, asset_id)
@@ -271,6 +279,9 @@ def accept_chapter(
                 raise ChapterAcceptanceError("Only an experimental chapter asset can be accepted")
             if source.asset_type not in {ChapterAssetKind.DRAFT.value, ChapterAssetKind.REVISION.value}:
                 raise ChapterAcceptanceError("Asset is not a chapter draft or revision")
+            source_number = _CHAPTER_NUMBER_FROM_SOURCE.search(Path(source.path).name)
+            if source_number is None or int(source_number.group("number")) != chapter_number:
+                raise ChapterAcceptanceError("Chapter number does not match the source draft")
             source_path = Path(source.path)
             if not source_path.is_file() or sha256_file(source_path) != source.sha256:
                 raise ChapterAcceptanceError("Source file/hash integrity check failed")
@@ -281,6 +292,8 @@ def accept_chapter(
             project = session.get(ProjectRow, title.project_id) if title else None
             if title is None or project is None:
                 raise ChapterAcceptanceError("Chapter asset has no valid title/project")
+            if title.status != TitleState.DRAFTING.value:
+                raise ChapterAcceptanceError("Chapter acceptance requires the title to be in DRAFTING")
             destination = root / "projects" / project.project_id / "titles" / title.title_id / "05_drafts" / "accepted" / f"chapter-{chapter_number:03d}.md"
             existing = session.scalar(select(AssetRow).where(
                 AssetRow.source_ref == source.asset_id,
@@ -314,7 +327,25 @@ def accept_chapter(
                     session.commit()
                     return ChapterAcceptanceResult(source, existing, existing_approval, existing_path)
                 raise ChapterAcceptanceError("An accepted chapter already exists with conflicting destination or hash")
-            if destination.exists():
+            superseded = None
+            if destination.exists() and supersede:
+                superseded = session.scalar(select(AssetRow).where(
+                    AssetRow.title_id == title.title_id,
+                    AssetRow.asset_type == ChapterAssetKind.ACCEPTED.value,
+                    AssetRow.approval_status == "accepted",
+                    AssetRow.path == str(destination.resolve()),
+                ))
+                if superseded is None or sha256_file(destination) != superseded.sha256:
+                    raise ChapterAcceptanceError("Accepted chapter destination does not match its accepted record")
+                archive_dir = destination.parents[2] / "12_archive" / "accepted-chapters"
+                archived_path = archive_dir / f"{superseded.asset_id}-{destination.name}"
+                if archived_path.exists():
+                    raise ChapterAcceptanceError("Archive destination already exists; refusing to overwrite it")
+                archive_dir.mkdir(parents=True, exist_ok=True)
+                shutil.move(str(destination), archived_path)
+                superseded.approval_status = "superseded"
+                superseded.path = str(archived_path.resolve())
+            elif destination.exists():
                 if sha256_file(destination) != source.sha256:
                     raise ChapterAcceptanceError("Accepted chapter destination exists with a conflicting hash")
                 raise ChapterAcceptanceError("Accepted chapter destination exists without matching accepted state")
@@ -359,6 +390,9 @@ def accept_chapter(
                 "destination_path": str(destination), "approval_id": approval.approval_id,
                 "reviewer": reviewer, "finding_ids": finding_ids or [], "proposal_ids": proposal_ids or [],
                 "provenance_id": accepted_provenance.provenance_id, "conditions": conditions,
+                "superseded_asset_id": superseded.asset_id if superseded is not None else None,
+                "supersede_reason": supersede_reason.strip() if superseded is not None and supersede_reason else None,
+                "superseded_archive_path": str(archived_path) if archived_path is not None else None,
             }
             AuditEventWriter.append(session, actor_id=reviewer, action="chapter.accepted", entity_type="asset", entity_id=accepted.asset_id,
                                     correlation_id=source.title_id, result="success", before_hash=source.sha256, after_hash=output_hash, metadata=metadata)
@@ -367,5 +401,8 @@ def accept_chapter(
     except Exception:
         if copied and destination is not None and destination.exists():
             destination.unlink()
+        if archived_path is not None and archived_path.exists() and destination is not None and not destination.exists():
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(archived_path), destination)
         raise
 

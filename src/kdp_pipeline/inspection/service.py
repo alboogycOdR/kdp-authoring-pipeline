@@ -8,9 +8,8 @@ from datetime import datetime, timezone
 from contextlib import contextmanager
 from pathlib import Path
 
-from sqlalchemy import create_engine, inspect as sqlalchemy_inspect, or_, select, text
+from sqlalchemy import inspect as sqlalchemy_inspect, or_, select, text
 from sqlalchemy.orm import Session
-from sqlalchemy.pool import NullPool
 
 from kdp_pipeline.models.planning import PlanningArtifactKind, spec_for
 from kdp_pipeline.continuity.service import ContinuityOutputInvalid, _validate_output
@@ -21,6 +20,7 @@ from kdp_pipeline.storage.db import (
     RevisionRecommendationRow, TitleRow,
     ProviderProfileRow, ProjectProviderSelectionRow, ProjectBudgetRow, RightsLogRow, VerificationItemRow,
     UsageEventRow, BudgetReservationRow, ModelPricingRow,
+    SCHEMA_VERSION, sqlite_engine,
 )
 from kdp_pipeline.storage.files import sha256_file
 
@@ -53,7 +53,7 @@ def _read_only_session(root: Path):
     db_path = root / ".kdp" / "state.db"
     if not db_path.is_file():
         raise FileNotFoundError(f"SQLite database does not exist: {db_path}")
-    engine = create_engine(f"sqlite:///{db_path}", future=True, poolclass=NullPool)
+    engine = sqlite_engine(db_path)
     try:
         with Session(engine, expire_on_commit=False) as session:
             yield session
@@ -492,6 +492,20 @@ def doctor(root: Path) -> list[dict[str, str]]:
             table_names = set(sqlalchemy_inspect(session.bind).get_table_names())
             missing = REQUIRED_TABLES - table_names
             add("OK" if not missing else "FAIL", "sqlite.tables", "all required tables present" if not missing else f"missing: {sorted(missing)}", "Use the approved database setup before running the pilot.")
+            connection = session.connection()
+            schema_version = int(connection.exec_driver_sql("PRAGMA user_version").scalar() or 0)
+            if schema_version > SCHEMA_VERSION:
+                add("FAIL", "sqlite.schema_version", f"database version {schema_version} is newer than supported version {SCHEMA_VERSION}",
+                    "Use an application release that supports this database version; do not open it with older code.")
+            elif schema_version < SCHEMA_VERSION:
+                add("WARN", "sqlite.schema_version", f"database version {schema_version} needs migration to {SCHEMA_VERSION}",
+                    "Open the workspace through the current application after taking the normal database backup.")
+            else:
+                add("OK", "sqlite.schema_version", f"version {schema_version}", "")
+            foreign_keys = int(connection.exec_driver_sql("PRAGMA foreign_keys").scalar() or 0)
+            add("OK" if foreign_keys == 1 else "FAIL", "sqlite.foreign_keys",
+                "foreign-key enforcement enabled" if foreign_keys == 1 else "foreign-key enforcement is disabled",
+                "Open the database through the supported application database engine.")
             titles = list(session.scalars(select(TitleRow)))
             if not missing:
                 projects = list(session.scalars(select(ProjectRow)))
@@ -537,10 +551,52 @@ def doctor(root: Path) -> list[dict[str, str]]:
                         message += "; unpriced usage exists"
                     add(status, f"budget:{budget.project_id}", message,
                         "Review project budget, pricing, and usage before continuing generation.")
+                trigger_names = set(connection.exec_driver_sql(
+                    "SELECT name FROM sqlite_master WHERE type='trigger' AND tbl_name='audit_events'"
+                ).scalars())
+                append_only = {"audit_events_no_update", "audit_events_no_delete"} <= trigger_names
+                add("OK" if append_only else "FAIL", "audit.append_only",
+                    "append-only audit protections present" if append_only else "audit events can be edited or deleted",
+                    "Initialize the database through the current application to install audit protections.")
+                workspace_root = root.resolve()
+                outside_paths = [asset.asset_id for asset in session.scalars(select(AssetRow))
+                                 if not Path(asset.path).resolve().is_relative_to(workspace_root)]
+                if outside_paths:
+                    add("FAIL", "paths.relocation", f"{len(outside_paths)} asset path(s) are outside this workspace",
+                        "For a restored workspace, use the integrity-checked relocation workflow before continuing.")
+                else:
+                    add("OK", "paths.relocation", "asset paths are within this workspace", "")
+                for build in session.scalars(select(ManuscriptBuildRow)):
+                    manifest = Path(build.manifest_path)
+                    valid = manifest.is_file() and sha256_file(manifest) == build.manifest_sha256
+                    add("OK" if valid else "FAIL", f"build-manifest:{build.build_id}",
+                        "manifest exists and hash matches" if valid else "manifest is missing or hash does not match",
+                        "Do not release from this build; rebuild from accepted chapters.")
+                for approval in session.scalars(select(ApprovalRow).where(
+                    ApprovalRow.asset_id.is_not(None), ApprovalRow.decision == "accepted"
+                )):
+                    asset = session.get(AssetRow, approval.asset_id)
+                    if asset is not None and asset.approval_status == "accepted" and approval.candidate_hash != asset.sha256:
+                        add("FAIL", f"approval:{approval.approval_id}", "approved hash does not match accepted asset",
+                            "Treat the acceptance as invalid until a human re-reviews the asset.")
             for title in titles:
                 project = session.get(ProjectRow, title.project_id)
                 workspace = root / "projects" / (project.project_id if project else "missing") / "titles" / title.title_id
                 add("OK" if workspace.is_dir() else "FAIL", f"workspace:{title.title_id}", "present" if workspace.is_dir() else "missing", "Restore the title workspace or stop the pilot.")
+                if workspace.is_dir():
+                    for relative, key in (("continuity-ledger.json", None), ("entities.json", "entities"), ("unresolved.json", "unresolved")):
+                        canon_file = workspace / "06_canon" / relative
+                        if not canon_file.is_file():
+                            continue
+                        try:
+                            canon = json.loads(canon_file.read_text(encoding="utf-8"))
+                            nonempty = any(canon.values()) if isinstance(canon, dict) else bool(canon)
+                        except (UnicodeDecodeError, json.JSONDecodeError):
+                            nonempty = True
+                        if nonempty:
+                            add("FAIL", f"canon:{title.title_id}:{relative}",
+                                "canon artefact is non-empty or unreadable; no approved application is recorded",
+                                "Do not rely on this canon state until it is reconciled through the approved proposal process.")
                 for asset in session.scalars(select(AssetRow).where(AssetRow.title_id == title.title_id)):
                     path = Path(asset.path)
                     if not path.is_file():

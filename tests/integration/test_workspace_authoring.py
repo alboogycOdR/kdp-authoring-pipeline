@@ -82,14 +82,16 @@ def test_browser_start_form_creates_book_without_provider_call(tmp_path: Path):
         token = re.search(r'name="csrf_token" value="([^"]+)"', page).group(1)
 
         connection.request("POST", "/books", body=urlencode(_fields()),
-                           headers={"Content-Type": "application/x-www-form-urlencoded"})
+                           headers={"Content-Type": "application/x-www-form-urlencoded",
+                                    "Sec-Fetch-Site": "same-origin"})
         response = connection.getresponse()
         response.read()
         assert response.status == 403
         assert inspect_workspace(tmp_path)["projects"] == []
 
         connection.request("POST", "/books", body=urlencode({**_fields(), "csrf_token": token}),
-                           headers={"Content-Type": "application/x-www-form-urlencoded"})
+                           headers={"Content-Type": "application/x-www-form-urlencoded",
+                                    "Sec-Fetch-Site": "same-origin"})
         response = connection.getresponse()
         response.read()
         assert response.status == 303
@@ -105,14 +107,14 @@ def test_browser_start_form_creates_book_without_provider_call(tmp_path: Path):
         connection.request("POST", f"/titles/{title_id}/actions/audience-brief",
             body=urlencode({"csrf_token": token, "operator": "reader-editor",
                             "audience": "Adult beginners"}),
-            headers={"Content-Type": "application/x-www-form-urlencoded"})
+            headers={"Content-Type": "application/x-www-form-urlencoded", "Sec-Fetch-Site": "same-origin"})
         response = connection.getresponse()
         response.read()
         assert response.status == 422
         connection.request("POST", f"/titles/{title_id}/actions/audience-brief",
             body=urlencode({"csrf_token": token, "operator": "reader-editor",
                             "audience": "Adult beginners", "confirm_cost": "yes"}),
-            headers={"Content-Type": "application/x-www-form-urlencoded"})
+            headers={"Content-Type": "application/x-www-form-urlencoded", "Sec-Fetch-Site": "same-origin"})
         response = connection.getresponse()
         response.read()
         assert response.status == 303

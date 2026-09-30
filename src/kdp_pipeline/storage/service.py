@@ -16,7 +16,6 @@ from kdp_pipeline.storage.audit import AuditEventWriter, list_events
 from kdp_pipeline.storage.db import (
     AssetRow,
     ApprovalRow,
-    AuditEventRow,
     JobRow,
     ProjectRow,
     ProvenanceRow,
@@ -102,8 +101,12 @@ def create_project(root: Path, name: str, language: str = "en", actor_id: str = 
                 write_json(workspace / "project.json", _project_snapshot(row))
             except Exception:
                 session.rollback()
-                session.execute(delete(AuditEventRow).where(AuditEventRow.entity_id == project_id))
                 session.execute(delete(ProjectRow).where(ProjectRow.project_id == project_id))
+                AuditEventWriter.append(
+                    session, actor_id=actor_id, action="project.create.rolled_back",
+                    entity_type="project", entity_id=project_id, correlation_id=project_id,
+                    result="failed", metadata={"reason": "snapshot write failed"},
+                )
                 session.commit()
                 raise
             return row
@@ -146,8 +149,12 @@ def create_title(root: Path, project_id: str, working_title: str, language: str 
                 write_json(workspace / "00_admin" / "title.json", _title_snapshot(row))
             except Exception:
                 session.rollback()
-                session.execute(delete(AuditEventRow).where(AuditEventRow.entity_id == title_id))
                 session.execute(delete(TitleRow).where(TitleRow.title_id == title_id))
+                AuditEventWriter.append(
+                    session, actor_id=actor_id, action="title.create.rolled_back",
+                    entity_type="title", entity_id=title_id, correlation_id=title_id,
+                    result="failed", metadata={"reason": "snapshot write failed"},
+                )
                 session.commit()
                 raise
             return row
@@ -218,6 +225,44 @@ def planning_requirements_met(root: Path, title_id: str) -> bool:
         return _planning_requirements_met(session, root, title_id)
 
 
+def _require_release_evidence(session: Session, title_id: str, target: TitleState) -> None:
+    """Require durable workflow evidence before entering release-side states."""
+    if target not in {TitleState.ASSET_READY, TitleState.PREFLIGHT_PASSED, TitleState.KDP_DRAFT_READY}:
+        return
+
+    from kdp_pipeline.release.service import _blockers
+    from kdp_pipeline.storage.db import ManuscriptBuildRow, ReleaseCandidateRow
+
+    if target == TitleState.ASSET_READY:
+        for build in session.scalars(select(ManuscriptBuildRow).where(
+            ManuscriptBuildRow.title_id == title_id, ManuscriptBuildRow.status == "built"
+        )):
+            output = session.get(AssetRow, build.asset_id)
+            manifest_path = Path(build.manifest_path)
+            if (output is not None and output.asset_type == "manuscript.build"
+                    and output.sha256 == build.output_sha256
+                    and Path(output.path).is_file()
+                    and sha256_file(Path(output.path)) == build.output_sha256
+                    and manifest_path.is_file()
+                    and sha256_file(manifest_path) == build.manifest_sha256
+                    and not json.loads(build.blockers_json or "[]")):
+                return
+        raise ValueError("Cannot transition to ASSET_READY: no unblocked, integrity-checked manuscript build exists")
+
+    candidates = list(session.scalars(select(ReleaseCandidateRow).where(
+        ReleaseCandidateRow.title_id == title_id
+    )))
+    if target == TitleState.PREFLIGHT_PASSED:
+        if not any(candidate.status in {"pending_human_review", "approved_for_manual_kdp_action"}
+                   and not _blockers(session, candidate) for candidate in candidates):
+            raise ValueError("Cannot transition to PREFLIGHT_PASSED: no release candidate is free of blockers")
+        return
+
+    if not any(candidate.status == "approved_for_manual_kdp_action" and not _blockers(session, candidate)
+               for candidate in candidates):
+        raise ValueError("Cannot transition to KDP_DRAFT_READY: no approved, unblocked release candidate exists")
+
+
 def transition_title(root: Path, title_id: str, target: TitleState, actor_id: str = "cli-user") -> TitleRow:
     with session_scope(root) as session:
         row = session.get(TitleRow, title_id)
@@ -227,6 +272,7 @@ def transition_title(root: Path, title_id: str, target: TitleState, actor_id: st
         require_transition(current, target)
         if target == TitleState.PLANNED and not _planning_requirements_met(session, root, title_id):
             raise ValueError("Cannot transition to PLANNED: required accepted planning artefacts are incomplete")
+        _require_release_evidence(session, title_id, target)
         before = row.status
         row.status = target.value
         AuditEventWriter.append(

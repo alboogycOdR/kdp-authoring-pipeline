@@ -16,6 +16,17 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _fsync_directory(directory: Path) -> None:
+    """Persist a rename on POSIX; Windows does not permit opening directories this way."""
+    if os.name == "nt":
+        return
+    fd = os.open(directory, os.O_RDONLY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
 def write_json(path: Path, data: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
@@ -23,7 +34,10 @@ def write_json(path: Path, data: dict) -> None:
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
             json.dump(data, fh, indent=2, ensure_ascii=False)
             fh.write("\n")
+            fh.flush()
+            os.fsync(fh.fileno())
         os.replace(temp_name, path)
+        _fsync_directory(path.parent)
     except Exception:
         try:
             os.unlink(temp_name)
@@ -33,13 +47,17 @@ def write_json(path: Path, data: dict) -> None:
 
 
 def write_text(path: Path, text: str) -> None:
-    """Atomically write a UTF-8 text artefact."""
+    """Atomically and durably write UTF-8 text with canonical LF line endings."""
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
     try:
         with os.fdopen(fd, "w", encoding="utf-8", newline="") as fh:
             fh.write(text)
+            fh.flush()
+            os.fsync(fh.fileno())
         os.replace(temp_name, path)
+        _fsync_directory(path.parent)
     except Exception:
         try:
             os.unlink(temp_name)

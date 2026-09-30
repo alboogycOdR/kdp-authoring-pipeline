@@ -91,7 +91,7 @@ def test_developmental_editorial_uses_profile_default_or_explicit_override(tmp_p
         "model": "gpt-5",
         "max_output_tokens": expected,
         "prompt_template_id": "editorial/developmental",
-        "prompt_template_version": "1.0",
+        "prompt_template_version": "1.1",  # developmental v1.1 carries the chapter (KDP-AUD-005)
         "reasoning_effort": "low",
         "timeouts_seconds": {"connect": 60.0, "read": 180.0, "write": 60.0, "pool": 60.0},
     }

@@ -1,0 +1,28 @@
+# Local reverse proxy behind Tailscale Serve.
+# Set KDP_STAGING_FQDN in the protected proxy.env file before validating.
+# This listener must remain loopback-only; Tailscale Serve is the sole network ingress.
+:8767 {
+	bind 127.0.0.1
+
+	@wrong_host not host {$KDP_STAGING_FQDN}
+	respond @wrong_host "Misdirected Request" 421
+
+	# Validate the browser-facing origin before normalizing it for the loopback app.
+	@cross_origin_post {
+		method POST
+		not header Origin https://{$KDP_STAGING_FQDN}:8767
+	}
+	respond @cross_origin_post "Request origin did not match this workspace." 403
+
+	request_body {
+		max_size 256KB
+	}
+
+	reverse_proxy 127.0.0.1:8766 {
+		header_up Host 127.0.0.1:8766
+		header_up Origin http://127.0.0.1:8766
+		# Tailscale Serve strips client-supplied identity headers and sets this value.
+		header_up -Tailscale-User-Login
+		header_up Tailscale-User-Login {http.request.header.Tailscale-User-Login}
+	}
+}

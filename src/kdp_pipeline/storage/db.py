@@ -13,6 +13,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     create_engine,
+    event,
     inspect as sqlalchemy_inspect,
     text,
 )
@@ -103,6 +104,7 @@ class ProvenanceRow(Base):
     ai_classification: Mapped[str | None] = mapped_column(String, nullable=True)
     disclosure_decision: Mapped[str | None] = mapped_column(String, nullable=True)
     reviewer: Mapped[str | None] = mapped_column(String, nullable=True)
+    prompt_template_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
 
 class ApprovalRow(Base):
@@ -381,21 +383,65 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def engine_for(root: Path):
-    state_dir = root / ".kdp"
-    state_dir.mkdir(parents=True, exist_ok=True)
-    return create_engine(
-        f"sqlite:///{state_dir / 'state.db'}",
+SCHEMA_VERSION = 1
+
+_AUDIT_APPEND_ONLY_TRIGGERS = (
+    "CREATE TRIGGER IF NOT EXISTS audit_events_no_update BEFORE UPDATE ON audit_events "
+    "BEGIN SELECT RAISE(ABORT, 'audit_events is append-only'); END",
+    "CREATE TRIGGER IF NOT EXISTS audit_events_no_delete BEFORE DELETE ON audit_events "
+    "BEGIN SELECT RAISE(ABORT, 'audit_events is append-only'); END",
+)
+
+
+def _configure_sqlite_connection(dbapi_connection, _connection_record) -> None:
+    """Apply integrity and bounded-wait settings to every pooled SQLite connection."""
+    # Disable sqlite3's implicit BEGIN so SQLAlchemy's transaction hook can defer the
+    # declared foreign keys until commit while still rejecting orphaned transactions.
+    dbapi_connection.isolation_level = None
+    cursor = dbapi_connection.cursor()
+    try:
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.execute("PRAGMA busy_timeout=15000")
+    finally:
+        cursor.close()
+
+
+def _begin_sqlite_transaction(connection) -> None:
+    connection.exec_driver_sql("BEGIN")
+    connection.exec_driver_sql("PRAGMA defer_foreign_keys=ON")
+
+
+def sqlite_engine(db_path: Path):
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    engine = create_engine(
+        f"sqlite:///{db_path}",
         future=True,
         poolclass=NullPool,
     )
+    event.listen(engine, "connect", _configure_sqlite_connection)
+    event.listen(engine, "begin", _begin_sqlite_transaction)
+    return engine
+
+
+def engine_for(root: Path):
+    return sqlite_engine(root / ".kdp" / "state.db")
 
 
 def init_db(root: Path) -> None:
     engine = engine_for(root)
     try:
+        db_path = root / ".kdp" / "state.db"
+        if db_path.is_file() and db_path.stat().st_size:
+            with engine.connect() as connection:
+                version = int(connection.exec_driver_sql("PRAGMA user_version").scalar() or 0)
+            if version > SCHEMA_VERSION:
+                raise RuntimeError(
+                    f"Database schema version {version} is newer than this code ({SCHEMA_VERSION}); "
+                    "upgrade the application instead of opening a newer database with older code."
+                )
+
         Base.metadata.create_all(engine)
-        # Additive migrations for workspaces created before provider controls.
+        # Additive migration for databases created before provider controls and prompt hashes.
         columns = {column["name"] for column in sqlalchemy_inspect(engine).get_columns("provider_profiles")}
         additions = {
             "reasoning_effort": "VARCHAR",
@@ -405,12 +451,19 @@ def init_db(root: Path) -> None:
             "pool_timeout_seconds": "FLOAT NOT NULL DEFAULT 60.0",
         }
         missing = [(name, declaration) for name, declaration in additions.items() if name not in columns]
-        if missing:
-            with engine.begin() as connection:
-                for name, declaration in missing:
-                    connection.execute(text(
-                        f"ALTER TABLE provider_profiles ADD COLUMN {name} {declaration}"
-                    ))
+        provenance_columns = {column["name"] for column in sqlalchemy_inspect(engine).get_columns("provenance")}
+        with engine.begin() as connection:
+            for name, declaration in missing:
+                connection.execute(text(f"ALTER TABLE provider_profiles ADD COLUMN {name} {declaration}"))
+            if "prompt_template_sha256" not in provenance_columns:
+                connection.execute(text(
+                    "ALTER TABLE provenance ADD COLUMN prompt_template_sha256 VARCHAR(64)"
+                ))
+            for statement in _AUDIT_APPEND_ONLY_TRIGGERS:
+                connection.execute(text(statement))
+            current_version = int(connection.exec_driver_sql("PRAGMA user_version").scalar() or 0)
+            if current_version < SCHEMA_VERSION:
+                connection.exec_driver_sql(f"PRAGMA user_version={SCHEMA_VERSION}")
     finally:
         engine.dispose()
 

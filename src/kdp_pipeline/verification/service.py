@@ -6,6 +6,7 @@ from pathlib import Path
 
 from sqlalchemy import select
 
+from kdp_pipeline.build.service import _SCRIPTURE_PLACEHOLDER
 from kdp_pipeline.core.ids import new_id
 from kdp_pipeline.storage.audit import AuditEventWriter
 from kdp_pipeline.storage.db import (
@@ -20,7 +21,6 @@ from kdp_pipeline.storage.files import sha256_file
 from kdp_pipeline.storage.service import session_scope
 
 
-_SCRIPTURE_PLACEHOLDER = re.compile(r"\[SCRIPTURE NEEDED\]", re.IGNORECASE)
 _FLAG_KINDS = {"source_claim", "research", "expert_review", "sensitivity"}
 _ITEM_DECISIONS = {"verified", "not_verified", "not_applicable"}
 _RIGHTS_DECISIONS = {"cleared", "restricted", "not_applicable"}

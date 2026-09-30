@@ -168,13 +168,15 @@ def test_review_http_requires_token_and_shows_exact_result(tmp_path: Path):
         form = {"review_hash": review_hash, "confirm_consequences": "yes",
                 "reviewer": "web-reviewer", "decision": "accept"}
         connection.request("POST", f"/reviews/asset/{draft_id}/decide", body=urlencode(form),
-                           headers={"Content-Type": "application/x-www-form-urlencoded"})
+                           headers={"Content-Type": "application/x-www-form-urlencoded",
+                                    "Sec-Fetch-Site": "same-origin"})
         response = connection.getresponse()
         assert response.status == 403
         response.read()
         form["csrf_token"] = token
         connection.request("POST", f"/reviews/asset/{draft_id}/decide", body=urlencode(form),
-                           headers={"Content-Type": "application/x-www-form-urlencoded"})
+                           headers={"Content-Type": "application/x-www-form-urlencoded",
+                                    "Sec-Fetch-Site": "same-origin"})
         response = connection.getresponse()
         assert response.status == 303
         redirect = response.headers["Location"]
@@ -255,7 +257,7 @@ def test_release_approval_requires_every_human_check_and_keeps_manual_publicatio
             run_release_check(tmp_path, candidate.candidate_id, {
                 "review_hash": current["review_hash"], "confirm_consequences": "yes",
                 "domain": domain, "key": key, "decision": "complete",
-                "reviewer": "human-reviewer", "rationale": "Checked against current evidence.",
+                "reviewer": "checklist-reviewer", "rationale": "Checked against current evidence.",
                 "evidence_reference": "human-review-record",
                 "statement": "Human-reviewed AI use disclosure." if domain == "ai_disclosure" else "",
             })

@@ -27,7 +27,13 @@ from kdp_pipeline.storage.service import register_asset, session_scope
 
 
 _CHAPTER_NAME = re.compile(r"chapter-(?P<number>\d{3})\.md$", re.IGNORECASE)
-_SCRIPTURE_PLACEHOLDER = re.compile(r"\[SCRIPTURE NEEDED\]", re.IGNORECASE)
+_SCRIPTURE_PLACEHOLDER = re.compile(
+    r"[\[【［(]\s*SCRIPTURE[\s\u00a0]+NEEDED\b[^\]】］)\n]{0,80}[\]】］)]",
+    re.IGNORECASE,
+)
+_UNFINISHED_MARKERS = re.compile(
+    r"(?im)^\s*(?:TODO|TBD|FIXME)\b|\[(?:TK|TODO|TBD)\]|\blorem ipsum\b"
+)
 _MATTER_TYPES = {"front": "manuscript.front_matter", "back": "manuscript.back_matter"}
 
 
@@ -152,6 +158,10 @@ def build_manuscript(root: Path, *, title_id: str, builder: str = "cli-user") ->
                 line = text.count("\n", 0, placeholder.start()) + 1
                 blockers.append({"type": "scripture_placeholder", "asset_id": asset.asset_id,
                     "locator": f"chapter-{number:03d}:line-{line:04d}", "text": placeholder.group(0)})
+            for marker in _UNFINISHED_MARKERS.finditer(text):
+                line = text.count("\n", 0, marker.start()) + 1
+                blockers.append({"type": "unfinished_text", "asset_id": asset.asset_id,
+                    "locator": f"chapter-{number:03d}:line-{line:04d}", "text": marker.group(0).strip()})
         chapters.sort(key=lambda item: item[0])
         numbers = [item[0] for item in chapters]
         if len(numbers) != len(set(numbers)):
@@ -215,8 +225,11 @@ def build_manuscript(root: Path, *, title_id: str, builder: str = "cli-user") ->
             sections.append(accepted_matter["front"].strip())
         sections.append(toc)
         for number, _asset, text in chapters:
-            heading = next((line for line in text.splitlines() if line.startswith("# ")), f"# Chapter {number}")
-            body = "\n".join(line for line in text.splitlines() if line != heading).strip()
+            lines = text.splitlines()
+            heading_index = next((index for index, line in enumerate(lines) if line.startswith("# ")), None)
+            heading = lines[heading_index] if heading_index is not None else f"# Chapter {number}"
+            body = "\n".join(lines[:heading_index] + lines[heading_index + 1:]
+                               if heading_index is not None else lines).strip()
             sections.append(f'<a id="chapter-{number:03d}"></a>\n\n{heading}\n\n{body}'.rstrip())
         if accepted_matter.get("back", "").strip():
             sections.append(accepted_matter["back"].strip())

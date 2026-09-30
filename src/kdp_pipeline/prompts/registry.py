@@ -46,6 +46,8 @@ class PromptRegistry:
 
         templates: dict[tuple[str, str], PromptTemplate] = {}
         for path in sorted(self.prompts_root.rglob("*.md")):
+            if path.name.upper() == "README.MD" or path.name.startswith("_"):
+                continue  # documentation beside prompts must not disable every generation path (KDP-AUD-030)
             match = _VERSIONED_NAME.match(path.name)
             if not match:
                 raise PromptRegistryError(
@@ -108,4 +110,5 @@ class PromptRegistry:
             template_version=template.template_version,
             rendered_text=rendered,
             rendered_sha256=sha256_text(rendered),
+            template_sha256=sha256_text(template.source_text),
         )

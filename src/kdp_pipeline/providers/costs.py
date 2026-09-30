@@ -111,13 +111,9 @@ def calculate_usage_cost(usage, pricing: ModelPricingRow | None) -> dict[str, An
     currency = usage.currency
     source = "unknown"
     cost_details: dict[str, Any] = {"basis": "unknown", "reason": "no provider cost or configured pricing"}
-    if usage.reported_cost is not None:
-        cost, source = usage.reported_cost, "provider_reported"
-        cost_details = {"basis": "provider_reported"}
-    elif usage.estimated_cost is not None:
-        cost, source = usage.estimated_cost, "estimated"
-        cost_details = {"basis": "provider_estimate"}
-    elif (pricing is not None and input_tokens is not None and output_tokens is not None):
+    # Configured operator rates are authoritative when they exist. A provider-reported cost is
+    # recorded as a detail and only raises the figure, never lowers it (KDP-AUD-007).
+    if (pricing is not None and input_tokens is not None and output_tokens is not None):
         cached = min(cached_tokens or 0, input_tokens)
         uncached = input_tokens - cached
         cached_rate = (pricing.cached_input_usd_per_million
@@ -133,6 +129,16 @@ def calculate_usage_cost(usage, pricing: ModelPricingRow | None) -> dict[str, An
                         "output_usd_per_million": pricing.output_usd_per_million,
                         "cached_input_usd_per_million": pricing.cached_input_usd_per_million,
                         "currency": pricing.currency, "pricing_updated_at": pricing.updated_at.isoformat()}
+        if usage.reported_cost is not None:
+            cost_details["provider_reported_cost"] = usage.reported_cost
+            if usage.reported_cost > cost:
+                cost, cost_details["basis"] = usage.reported_cost, "provider_reported_higher_than_rates"
+    elif usage.reported_cost is not None:
+        cost, source = usage.reported_cost, "provider_reported"
+        cost_details = {"basis": "provider_reported"}
+    elif usage.estimated_cost is not None:
+        cost, source = usage.estimated_cost, "estimated"
+        cost_details = {"basis": "provider_estimate"}
     if currency is None and (source == "estimated" or source == "provider_reported"):
         currency = pricing.currency if pricing is not None else "USD"
     if cost is not None and (not isfinite(float(cost)) or cost < 0):

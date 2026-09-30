@@ -47,3 +47,34 @@ To start a new book on staging, open the Tailscale Workspace URL above and use *
 The Workspace currently has no application login or user roles. Treat all Tailnet members allowed to reach this service as trusted operators with the ability to submit human decisions; restrict Tailscale ACLs accordingly. This deployment does not add KDP upload or automatic publication.
 
 The development Pilot database originally stored absolute Windows paths. The one-time migration rebased registered paths on staging while retaining content hashes and historical audit/provenance records. Future copies must repeat integrity checks and must not overwrite newer staging work.
+
+## Staging security verification — 2026-09-30
+
+G5 performed read-only service and routing checks and created a restricted pre-change backup. No live service, proxy, Tailscale route, provider setting, project record, or artefact was changed.
+
+Observed staging state:
+
+- `kdp-workspace.service` is active and binds `127.0.0.1:8766`; `kdp-workspace-tailnet.service` (Caddy) is active and binds `100.78.70.2:8767`.
+- From the VPS, loopback `/healthz`, the tailnet-bound `/healthz`, and the tailnet-bound Workspace root returned HTTP 200. This confirms availability only; it does not verify access from a different tailnet device.
+- The active Caddyfile has no `basic_auth` or `forward_auth`, and no operator identity header is configured in the running app environment. The Workspace root returned 200 without authentication from the VPS. The current proxy rewrites `Host` and `Origin` to loopback but does not validate the browser-facing Origin before rewriting it. Do not treat current tailnet reachability as operator authentication. Until the gated route below is installed and verified, do not use staging for provider-backed actions, approvals, verification decisions, or release actions.
+- The exact Tailscale Serve routes observed were:
+
+  | Public/Tailnet listener | Exposure | Loopback target |
+  | --- | --- | --- |
+  | HTTPS 443 | Funnel (public internet) | `127.0.0.1:3579` |
+  | HTTPS 8001 | Tailnet only | `127.0.0.1:8001` |
+  | HTTPS 8095 | Tailnet only | `127.0.0.1:8095` |
+  | HTTPS 8443 | Tailnet only | `127.0.0.1:3300` |
+
+  The Funnel listener's target process is a separate Node/Next listener, distinct from the Python KDP Workspace service; its `/healthz` returned 404 while KDP's loopback `/healthz` returned 200. Its page content was not inspected and the public route was preserved. No KDP port is currently routed by Serve or Funnel. The existing tailnet policy cannot be inspected from this VPS, so owner-only access is **unverified**.
+- The staging checkout is still at `v1.0-platform-complete` and has local modifications. No checkout, pull, restart, or code deployment was performed.
+
+The verified pre-change backup is at `/home/clawusr/.local/backups/kdp-staging/prechange-g5-20260930T133339225637Z`. It contains an SQLite online backup, a paired `projects/` archive, the active Caddyfile and two user service-unit files, plus a Tailscale Serve status snapshot. Its directory mode is `0700`; backup and manifest files are `0600`. The restore-copy test passed SQLite `integrity_check`, found zero foreign-key violations, restored all 87 project files with a matching aggregate tree hash, and verified all 64 registered asset hashes. The source project tree was unchanged during capture. The backup is **not encrypted at file level**; host-disk encryption was not verified. Keep it on this host and do not represent it as encrypted.
+
+The Serve `get-config --all` command returned an empty Tailscale Services configuration; it did not export the node's ordinary Serve routes. The exact current port/status JSON and text snapshots are in the restricted backup. Port 8767 has no current Serve or Funnel route, but it is occupied by the current direct Caddy listener. The intended additive rollback is `tailscale serve --https=8767 off`; it preserves other ports. A complete data recovery, if needed, must restore the SQLite backup and paired artefact archive together during a controlled maintenance window.
+
+### Gated identity path — not installed
+
+Sanitized Caddy and systemd templates are in [`deploy/staging/`](../../deploy/staging/README.md). They describe Tailscale Serve HTTPS on a dedicated tailnet-only port 8767 forwarding to loopback-only Caddy, then to the loopback-only Workspace. Caddy validates the public Host and POST Origin before normalizing them for the app and forwards `Tailscale-User-Login`; the app trusts that header only when `KDP_WORKSPACE_OPERATOR_HEADER=Tailscale-User-Login` is configured. According to the [Tailscale Serve identity-header documentation](https://tailscale.com/docs/features/tailscale-serve), Serve injects this header and removes a client-supplied value, but does not populate identity for tagged client devices.
+
+Before applying this route, an operator with Tailscale admin access must restrict TCP 8767 to the intended named operator and user-identity devices, verify that no broad member grant allows other devices, and test an unauthorized device is denied. The correct owner allowlist is not known from the VPS and has not been configured or verified here. The app candidate also needs to be integrated and selected as a reviewed immutable revision before it is restarted. Do not move the direct Caddy listener, alter the existing Funnel, restart the Workspace, or deploy code until those prerequisites and a fresh verified backup are confirmed.

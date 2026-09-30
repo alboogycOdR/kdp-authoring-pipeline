@@ -138,14 +138,21 @@ def _validate_output(text: str) -> dict:
         r"\b(required )?(chapter|draft|context|positioning|book brief|outline|chapter card|canon baseline)\b",
         folded, re.DOTALL,
     )
-    if requests_missing_context or declares_missing_context or any(phrase in folded for phrase in (
+    explicit_refusal = any(phrase in folded for phrase in (
         "i don't have the chapter", "i do not have the chapter", "send the materials", "context is missing",
-    )):
-        raise ContinuityOutputInvalid("continuity output says required context is missing")
+    ))
     try:
         value = json.loads(stripped)
     except json.JSONDecodeError as exc:
+        if requests_missing_context or declares_missing_context or explicit_refusal:
+            raise ContinuityOutputInvalid("continuity output says required context is missing") from exc
         raise ContinuityOutputInvalid("continuity output is not valid JSON") from exc
+    # Inside a valid JSON contract, words like "missing ... outline" are usually genuine findings
+    # ("the draft is missing the outline's second beat"); only explicit requests for materials,
+    # or a refusal, invalidate the analysis (KDP-AUD-011).
+    if explicit_refusal or (requests_missing_context and not (isinstance(value, dict)
+                                                              and value.get("supplied_context_confirmed") is True)):
+        raise ContinuityOutputInvalid("continuity output says required context is missing")
     if not isinstance(value, dict):
         raise ContinuityOutputInvalid("continuity output must be a JSON object")
     missing = [key for key in REQUIRED_FIELDS if key not in value or not isinstance(value[key], REQUIRED_FIELDS[key])]

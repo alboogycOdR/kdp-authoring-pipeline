@@ -54,7 +54,7 @@ def _accepted_title(root: Path) -> tuple[str, str]:
 
 def _post(connection: HTTPConnection, title_id: str, action: str, fields: dict[str, str],
           *, origin: str | None = None):
-    headers = {"Content-Type": "application/x-www-form-urlencoded"}
+    headers = {"Content-Type": "application/x-www-form-urlencoded", "Sec-Fetch-Site": "same-origin"}
     if origin:
         headers["Origin"] = origin
     connection.request("POST", f"/titles/{title_id}/actions/{action}",

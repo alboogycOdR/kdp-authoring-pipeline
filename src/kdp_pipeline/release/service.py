@@ -7,6 +7,7 @@ from sqlalchemy import select
 
 from kdp_pipeline.core.hashing import canonical_json_bytes, sha256_bytes
 from kdp_pipeline.core.ids import new_id
+from kdp_pipeline.core.state_machine import TitleState
 from kdp_pipeline.storage.audit import AuditEventWriter
 from kdp_pipeline.storage.db import (
     ApprovalRow, AssetRow, ManuscriptBuildRow, ProvenanceRow, ReleaseCandidateRow,
@@ -26,6 +27,43 @@ _DOMAINS = {"metadata": set(METADATA_CHECKS), "kdp": set(KDP_CHECKS),
 _CHECK_DECISIONS = {"complete", "not_applicable"}
 _REVIEW_DECISIONS = {"approve", "hold", "reject"}
 _MANUAL_PUBLICATION_CONDITION = "KDP upload and publication remain manual human-controlled actions."
+_NON_RELEASABLE_TITLE_STATES = {
+    TitleState.RIGHTS_HOLD.value,
+    TitleState.POLICY_HOLD.value,
+    TitleState.KDP_EXCEPTION.value,
+    TitleState.HUMAN_SUBMITTED.value,
+    TitleState.IN_REVIEW.value,
+    TitleState.LIVE.value,
+    TitleState.MONITORING.value,
+    TitleState.UPDATE_ASSESSMENT.value,
+}
+
+
+def _has_ai_lineage(session, asset: AssetRow, seen: set[str] | None = None) -> bool:
+    """Follow asset and provenance references so manual edits retain AI disclosure lineage."""
+    seen = set() if seen is None else seen
+    if asset.asset_id in seen:
+        return False
+    seen.add(asset.asset_id)
+    classification = str(asset.ai_classification or "").upper()
+    if asset.creator_type in {"ai", "ai+human"} or classification.startswith("AI_GENERATED"):
+        return True
+    provenance = session.scalar(select(ProvenanceRow).where(ProvenanceRow.asset_id == asset.asset_id))
+    if provenance is not None and str(provenance.ai_classification or "").upper().startswith("AI_GENERATED"):
+        return True
+    lineage_ids = [asset.source_ref] if asset.source_ref else []
+    if provenance is not None:
+        try:
+            references = json.loads(provenance.input_references_json or "[]")
+            if isinstance(references, list):
+                lineage_ids.extend(reference for reference in references if isinstance(reference, str))
+        except (TypeError, json.JSONDecodeError):
+            pass
+    for lineage_id in dict.fromkeys(lineage_ids):
+        parent = session.get(AssetRow, lineage_id)
+        if parent is not None and _has_ai_lineage(session, parent, seen):
+            return True
+    return False
 
 
 def _blocker_identity(blocker: dict) -> tuple:
@@ -193,9 +231,10 @@ def create_release_candidate(root: Path, *, title_id: str, build_id: str,
                 "model": provenance.model if provenance else None,
                 "prompt_template_id": provenance.prompt_template_id if provenance else None,
                 "ai_classification": provenance.ai_classification if provenance else None,
-                "disclosure_decision": provenance.disclosure_decision if provenance else None})
+                "disclosure_decision": provenance.disclosure_decision if provenance else None,
+                "ai_lineage": _has_ai_lineage(session, asset) if asset else False})
         ai_summary = {"assets": provenance_summary,
-            "ai_asset_count": sum(item["creator_type"] == "ai" for item in provenance_summary),
+            "ai_asset_count": sum(item["ai_lineage"] for item in provenance_summary),
             "status": "pending_human_disclosure"}
         metadata_checks = {key: {"status": "pending", "evidence_reference": None,
                                  "rationale": None, "reviewer": None, "value": None}
@@ -299,6 +338,23 @@ def review_release_candidate(root: Path, candidate_id: str, *, decision: str,
         if row.status in {"approved_for_manual_kdp_action", "rejected"}:
             raise ValueError("Release candidate has already reached a terminal review state")
         blockers = _blockers(session, row)
+        if decision == "approve":
+            title = session.get(TitleRow, row.title_id)
+            if title is not None and title.status in _NON_RELEASABLE_TITLE_STATES:
+                blockers.append({"type": "title_state", "status": title.status})
+            build = session.get(ManuscriptBuildRow, row.build_id)
+            preparers = {row.created_by.strip().casefold()}
+            if build is not None:
+                preparers.add(build.created_by.strip().casefold())
+            disclosure = json.loads(row.ai_disclosure_json or "{}")
+            preparers.add(str(disclosure.get("reviewer") or "").strip().casefold())
+            for column in (row.metadata_checks_json, row.kdp_checks_json):
+                preparers.update(str(check.get("reviewer") or "").strip().casefold()
+                                 for check in json.loads(column or "{}").values())
+            preparers.discard("")
+            if reviewer.strip().casefold() in preparers:
+                blockers.append({"type": "segregation_of_duties",
+                    "detail": "approver prepared or checked this release candidate"})
         if decision == "approve" and blockers:
             row.status = "blocked"
             AuditEventWriter.append(session, actor_id=reviewer.strip(), action="release.candidate.approval_blocked",

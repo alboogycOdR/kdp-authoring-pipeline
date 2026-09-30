@@ -12,6 +12,7 @@ import httpx
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from kdp_pipeline.providers.contracts import GenerationRequest, GenerationResult, UsageMetadata
+from kdp_pipeline.providers.settings import allowed_provider_hosts
 
 
 class OpenAICompatibleProviderError(RuntimeError):
@@ -47,6 +48,23 @@ class ProviderResponseError(OpenAICompatibleProviderError):
     pass
 
 
+MAX_RESPONSE_BYTES = 4 * 1024 * 1024  # KDP-AUD-023: a chapter response is kilobytes, never megabytes
+
+
+def _usage_int(value: object) -> int | None:
+    """Accept only non-negative integers (or integral strings); anything else is recorded as unknown.
+
+    A malformed usage block must never turn a billed 200 response into an exception that
+    loses the usage record (KDP-AUD-022)."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, str) and value.isdecimal():
+        value = int(value)
+    if isinstance(value, float) and value.is_integer():
+        value = int(value)
+    return value if isinstance(value, int) and 0 <= value < 10**12 else None
+
+
 class OpenAICompatibleConfig(BaseModel):
     base_url: str = "https://api.openai.com/v1"
     model: str = Field(min_length=1)
@@ -72,10 +90,21 @@ class OpenAICompatibleConfig(BaseModel):
     @classmethod
     def validate_base_url(cls, value: str) -> str:
         parsed = urlparse(value)
-        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-            raise ValueError("base_url must be an absolute http(s) URL")
+        if (parsed.scheme not in {"http", "https"} or not parsed.netloc
+                or not parsed.hostname or parsed.username or parsed.password):
+            raise ValueError("base_url must be an absolute HTTP(S) URL without credentials")
         if parsed.query or parsed.fragment:
             raise ValueError("base_url must not contain a query string or fragment")
+        host = parsed.hostname.lower()
+        loopback = host == "localhost"
+        try:
+            loopback = loopback or ipaddress.ip_address(host).is_loopback
+        except ValueError:
+            pass
+        if parsed.scheme == "http" and not loopback:
+            raise ValueError("HTTP is allowed only for loopback provider endpoints")
+        if not loopback and host not in allowed_provider_hosts():
+            raise ValueError("Provider host is not in KDP_PROVIDER_HOST_ALLOWLIST; add it deliberately before use")
         return value.rstrip("/")
 
     @classmethod
@@ -191,11 +220,19 @@ class OpenAICompatibleProvider:
         started = time.perf_counter()
         try:
             try:
-                response = await client.post(
-                    f"{self.config.base_url}/chat/completions",
-                    headers=headers,
-                    json=payload,
-                )
+                async with client.stream("POST", f"{self.config.base_url}/chat/completions",
+                                         headers=headers, json=payload) as streamed:
+                    declared = streamed.headers.get("content-length")
+                    if declared and declared.isdigit() and int(declared) > MAX_RESPONSE_BYTES:
+                        raise ProviderResponseError("Provider response exceeds the maximum accepted size")
+                    chunks, received = [], 0
+                    async for chunk in streamed.aiter_bytes():
+                        received += len(chunk)
+                        if received > MAX_RESPONSE_BYTES:
+                            raise ProviderResponseError("Provider response exceeds the maximum accepted size")
+                        chunks.append(chunk)
+                    response = httpx.Response(streamed.status_code, headers=streamed.headers,
+                                              content=b"".join(chunks), request=streamed.request)
             except httpx.HTTPError as exc:
                 raise ProviderTransportError(
                     f"OpenAI-compatible provider transport failure: {type(exc).__name__}"
@@ -264,16 +301,17 @@ class OpenAICompatibleProvider:
                 ),
             }
             diagnostics = {key: value for key, value in diagnostics.items() if value is not None}
+            reported_cost = usage.get("cost") if isinstance(usage, dict) else None
+            reported_cost = (float(reported_cost) if isinstance(reported_cost, (int, float))
+                             and not isinstance(reported_cost, bool) and 0 <= reported_cost < 1e6 else None)
             usage_metadata = UsageMetadata(
-                input_tokens=usage.get("prompt_tokens") if isinstance(usage, dict) else None,
-                output_tokens=usage.get("completion_tokens") if isinstance(usage, dict) else None,
-                total_tokens=usage.get("total_tokens") if isinstance(usage, dict) else None,
-                cached_input_tokens=(usage.get("prompt_tokens_details", {}).get("cached_tokens")
-                                     if isinstance(usage, dict) and isinstance(usage.get("prompt_tokens_details"), dict)
-                                     else None),
-                reported_cost=(usage.get("cost") if isinstance(usage, dict)
-                               and isinstance(usage.get("cost"), (int, float)) else None),
-                currency="USD" if isinstance(usage, dict) and isinstance(usage.get("cost"), (int, float)) else None,
+                input_tokens=_usage_int(usage.get("prompt_tokens")),
+                output_tokens=_usage_int(usage.get("completion_tokens")),
+                total_tokens=_usage_int(usage.get("total_tokens")),
+                cached_input_tokens=(_usage_int(usage.get("prompt_tokens_details", {}).get("cached_tokens"))
+                                     if isinstance(usage.get("prompt_tokens_details"), dict) else None),
+                reported_cost=reported_cost,
+                currency="USD" if reported_cost is not None else None,
             ) if isinstance(usage, dict) else None
 
             response_id = body.get("id") if isinstance(body, dict) else None

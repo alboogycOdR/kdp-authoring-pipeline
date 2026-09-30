@@ -5,7 +5,24 @@ import ipaddress
 from typing import Any, Literal
 from urllib.parse import urlparse
 
+import os
+
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+# A profile must not be able to turn an unrelated secret (cloud, VCS, database, SSH, the app's own
+# settings) into a bearer token for an arbitrary host (KDP-AUD-009).
+_ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+_FORBIDDEN_ENV = re.compile(
+    r"^(?:AWS_|AZURE_|GOOGLE_|GCP_|GCLOUD|GITHUB_|GH_|GITLAB_|CI_|ACTIONS_|DOCKER|KUBE|SSH_|NPM_|PYPI_|TWINE_|"
+    r"DATABASE|PG|MYSQL|REDIS|SLACK_|STRIPE_|TAILSCALE|SECRET_KEY$|DJANGO_|FLASK_)|PASSWORD|PASSWD|SESSION",
+    re.IGNORECASE)
+_DEFAULT_PROVIDER_HOSTS = {"api.openai.com"}
+
+
+def allowed_provider_hosts() -> set[str]:
+    """Remote provider hosts the operator has allowed; loopback is always allowed."""
+    extra = os.getenv("KDP_PROVIDER_HOST_ALLOWLIST", "")
+    return _DEFAULT_PROVIDER_HOSTS | {host.strip().lower() for host in extra.split(",") if host.strip()}
 
 
 class ProviderProfileSettings(BaseModel):
@@ -41,8 +58,8 @@ class ProviderProfileSettings(BaseModel):
     @field_validator("api_key_env")
     @classmethod
     def validate_api_key_env(cls, value: str | None) -> str | None:
-        if value is not None and not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", value):
-            raise ValueError("api_key_env must be an environment variable name")
+        if value is not None and (not _ENV_NAME.fullmatch(value) or _FORBIDDEN_ENV.search(value)):
+            raise ValueError("api_key_env must name a dedicated provider key variable, not a cloud/VCS/database/app secret")
         return value
 
     @field_validator("base_url")
@@ -56,8 +73,11 @@ class ProviderProfileSettings(BaseModel):
             raise ValueError("base_url must be an absolute HTTP(S) URL without credentials")
         if parsed.query or parsed.fragment:
             raise ValueError("base_url must not contain a query string or fragment")
-        if parsed.scheme == "http" and parsed.hostname not in {"localhost", "127.0.0.1", "::1"}:
+        loopback = parsed.hostname in {"localhost", "127.0.0.1", "::1"}
+        if parsed.scheme == "http" and not loopback:
             raise ValueError("HTTP is allowed only for loopback provider endpoints")
+        if not loopback and parsed.hostname.lower() not in allowed_provider_hosts():
+            raise ValueError("Provider host is not in KDP_PROVIDER_HOST_ALLOWLIST; add it deliberately before use")
         return value
 
     @model_validator(mode="after")

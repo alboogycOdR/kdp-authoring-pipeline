@@ -16,7 +16,7 @@ from kdp_pipeline.storage.files import sha256_file, write_text
 from kdp_pipeline.storage.service import session_scope
 
 
-_CHAPTER_IN_PATH = re.compile(r"chapter\.(?:draft|revision)\.(?P<number>\d{1,3})[-.]", re.IGNORECASE)
+_CHAPTER_IN_PATH = re.compile(r"chapter\.(?:draft|revision|revise)\.(?P<number>\d{1,3})[-.]", re.IGNORECASE)
 _ACCEPTED_PATH = re.compile(r"chapter-(?P<number>\d{3})\.md$")
 _MAX_BATCH = 10
 

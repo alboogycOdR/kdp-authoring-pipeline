@@ -275,6 +275,37 @@ def _reject_empty_output(root: Path, job_id: str, diagnostics: dict[str, Any]) -
         session.commit()
 
 
+_INCOMPLETE_FINISH_REASONS = {"length", "content_filter", "max_tokens", "incomplete"}
+
+
+def _unusable_completion(diagnostics: dict[str, Any]) -> str | None:
+    """Truncated, filtered or refused completions must never become assets (KDP-AUD-010)."""
+    reason = diagnostics.get("finish_reason")
+    if reason in _INCOMPLETE_FINISH_REASONS:
+        return f"provider output is incomplete (finish_reason={reason})"
+    if diagnostics.get("incomplete_reason"):
+        return f"provider output is incomplete ({diagnostics['incomplete_reason']})"
+    if diagnostics.get("refusal_present"):
+        return "provider refused the request"
+    return None
+
+
+def _reject_unusable_output(root: Path, job_id: str, reason: str, diagnostics: dict[str, Any]) -> None:
+    with session_scope(root) as session:
+        job = session.get(JobRow, job_id)
+        if job is None:
+            return
+        job.status = "failed"
+        job.error = f"Generation rejected: {reason}"
+        job.completed_at = utcnow()
+        AuditEventWriter.append(
+            session, actor_id="system", action="generation.unusable_output_rejected",
+            entity_type="job", entity_id=job_id, correlation_id=job_id, result="failed",
+            metadata={"reason": reason, "response_diagnostics": diagnostics, "usage_preserved": True},
+        )
+        session.commit()
+
+
 class GenerationService:
     @staticmethod
     async def generate(
@@ -340,6 +371,13 @@ class GenerationService:
             if title is None:
                 raise ValueError(f"Unknown title: {title_id}")
             existing = session.scalar(select(JobRow).where(JobRow.idempotency_key == idempotency_key))
+            if existing is not None and existing.status == "failed":
+                # An operator-initiated re-run after a recorded failure is a new, separately budgeted
+                # and audited attempt; nothing here retries automatically (KDP-AUD-013).
+                prior = session.scalars(select(JobRow.idempotency_key).where(
+                    JobRow.idempotency_key.like(f"{idempotency_key}%"))).all()
+                idempotency_key = f"{idempotency_key}:attempt-{len(prior) + 1}"
+                existing = session.scalar(select(JobRow).where(JobRow.idempotency_key == idempotency_key))
             if existing is not None:
                 if existing.status == "success":
                     existing_job = existing
@@ -508,6 +546,10 @@ class GenerationService:
         if not generation_result.text.strip():
             _reject_empty_output(root, job.job_id, response_diagnostics)
             raise GenerationServiceError("Generation rejected: provider output was empty or whitespace-only")
+        unusable = _unusable_completion(response_diagnostics)
+        if unusable:
+            _reject_unusable_output(root, job.job_id, unusable, response_diagnostics)
+            raise GenerationServiceError(f"Generation rejected: {unusable}")
 
         output_path: Path | None = None
         try:
@@ -555,6 +597,7 @@ class GenerationService:
                     output_hash=output_hash,
                     generation_timestamp=utcnow(),
                     ai_classification="AI_GENERATED",
+                    prompt_template_sha256=rendered_prompt.template_sha256,
                 )
                 session.add(asset)
                 session.add(provenance_row)

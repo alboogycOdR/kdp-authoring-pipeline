@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
+import logging
+import os
 from pathlib import Path
 from threading import Lock
 from urllib.parse import parse_qs, unquote, urlsplit
@@ -18,6 +20,17 @@ from kdp_pipeline.workspace.review import inspect_review
 
 
 _ROUTE_ID = re.compile(r"^[A-Za-z0-9-]{1,80}$")
+_HEADER_NAME = re.compile(r"^[A-Za-z0-9-]+$")
+_LOG = logging.getLogger("kdp_pipeline.workspace.access")
+_IDENTITY_MISSING = object()
+_SECURITY_HEADERS = (
+    ("Cache-Control", "no-store"),
+    ("X-Content-Type-Options", "nosniff"),
+    ("Referrer-Policy", "no-referrer"),
+    ("X-Frame-Options", "DENY"),
+    ("Content-Security-Policy", "default-src 'self'; style-src 'self'; script-src 'self'; "
+     "img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"),
+)
 _STATIC_FILES = {
     "workspace.css": ("text/css; charset=utf-8", "static/workspace.css"),
     "workspace.js": ("text/javascript; charset=utf-8", "static/workspace.js"),
@@ -29,6 +42,11 @@ def create_workspace_server(root: Path, *, port: int = 8765) -> ThreadingHTTPSer
     root = root.resolve()
     if not 0 <= port <= 65535:
         raise ValueError("Port must be between 0 and 65535")
+    configured_identity_header = os.environ.get("KDP_WORKSPACE_OPERATOR_HEADER")
+    if configured_identity_header is not None:
+        configured_identity_header = configured_identity_header.strip()
+        if not _HEADER_NAME.fullmatch(configured_identity_header):
+            raise ValueError("KDP_WORKSPACE_OPERATOR_HEADER must be a valid HTTP header name")
     csrf_token = secrets.token_urlsafe(32)
     flash: dict[str, str] = {}
     flash_lock = Lock()
@@ -41,32 +59,84 @@ def create_workspace_server(root: Path, *, port: int = 8765) -> ThreadingHTTPSer
             flash[flash_id] = message
         return flash_id
 
-    def take_notice(flash_id: str) -> str:
+    def take_notice(flash_id: str, *, consume: bool = True) -> str:
         with flash_lock:
-            return flash.pop(flash_id, "")
+            if consume:
+                return flash.pop(flash_id, "")
+            return flash.get(flash_id, "")
 
     class WorkspaceHandler(BaseHTTPRequestHandler):
         server_version = "KDPWorkspace"
         sys_version = ""
+        timeout = 30
 
         def log_message(self, _format: str, *args: object) -> None:
-            # Requests can contain locally entered search terms; do not log them.
-            return
+            # BaseHTTPRequestHandler supplies the full request line including its query.
+            # Log only the path so search terms and form data stay private.
+            path = urlsplit(getattr(self, "path", "")).path or "/"
+            status = str(args[1]) if len(args) > 1 and str(args[1]).isdigit() else "-"
+            _LOG.info("%s %s %s %s", self.client_address[0], self.command or "-", path, status)
+
+        def log_error(self, _format: str, *args: object) -> None:
+            path = urlsplit(getattr(self, "path", "")).path or "/"
+            _LOG.warning("Workspace request error %s %s", self.command or "-", path)
+
+        def end_headers(self) -> None:
+            for name, value in _SECURITY_HEADERS:
+                self.send_header(name, value)
+            super().end_headers()
+            self._workspace_response_started = True
+
+        def handle_one_request(self) -> None:
+            self._workspace_response_started = False
+            try:
+                super().handle_one_request()
+            except (BrokenPipeError, ConnectionError, TimeoutError):
+                raise
+            except Exception as exc:  # noqa: BLE001 — safe response for unexpected service failures.
+                _LOG.error("Workspace request failed (%s)", type(exc).__name__)
+                if not self._workspace_response_started:
+                    try:
+                        self._respond(
+                            render_not_found("The Workspace could not complete this request. "
+                                             "Check the current records before trying again."),
+                            "text/html; charset=utf-8", 503)
+                    except (BrokenPipeError, ConnectionError, TimeoutError):
+                        pass
+                self.close_connection = True
+
+        def _operator_identity(self) -> str | object | None:
+            if configured_identity_header is None:
+                return None
+            values = self.headers.get_all(configured_identity_header, [])
+            if len(values) != 1:
+                return _IDENTITY_MISSING
+            identity = values[0].strip()
+            if (not identity or len(identity) > 100
+                    or any(ord(char) < 32 or ord(char) == 127 for char in identity)):
+                return _IDENTITY_MISSING
+            return identity
+
+        def _same_origin_post(self) -> bool:
+            host_values = self.headers.get_all("Host", [])
+            origin_values = self.headers.get_all("Origin", [])
+            fetch_site_values = self.headers.get_all("Sec-Fetch-Site", [])
+            if len(host_values) != 1 or len(origin_values) > 1 or len(fetch_site_values) > 1:
+                return False
+            expected_origin = f"http://{host_values[0]}"
+            if origin_values:
+                return origin_values[0].strip() == expected_origin
+            fetch_site = fetch_site_values[0].strip().lower() if fetch_site_values else ""
+            return fetch_site in {"same-origin", "none"}
 
         def _respond(self, body: str | bytes, content_type: str, status: int = 200, *, head: bool = False) -> None:
+            head = head or getattr(self, "_workspace_head", False)
             payload = body.encode("utf-8") if isinstance(body, str) else body
             self.send_response(status)
             self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(len(payload)))
-            self.send_header("Cache-Control", "no-store")
-            self.send_header("X-Content-Type-Options", "nosniff")
-            self.send_header("Referrer-Policy", "no-referrer")
-            self.send_header("X-Frame-Options", "DENY")
-            self.send_header("Content-Security-Policy",
-                             "default-src 'self'; style-src 'self'; script-src 'self'; "
-                             "img-src 'self' data:; connect-src 'self'; base-uri 'none'; "
-                             "form-action 'self'; frame-ancestors 'none'")
             self.end_headers()
+            self._workspace_response_started = True
             if not head:
                 self.wfile.write(payload)
 
@@ -77,7 +147,10 @@ def create_workspace_server(root: Path, *, port: int = 8765) -> ThreadingHTTPSer
                 return None
 
         def _valid_host(self) -> bool:
-            host = self.headers.get("Host", "").lower()
+            hosts = self.headers.get_all("Host", [])
+            if len(hosts) != 1:
+                return False
+            host = hosts[0].lower()
             return host in {f"127.0.0.1:{self.server.server_address[1]}",
                             f"localhost:{self.server.server_address[1]}"}
 
@@ -109,7 +182,8 @@ def create_workspace_server(root: Path, *, port: int = 8765) -> ThreadingHTTPSer
                 self._respond(render_not_found("Search query is too complex."), "text/html; charset=utf-8", 400)
                 return
             if parts.path == "/":
-                notice = take_notice(parse_qs(parts.query).get("result", [""])[0])
+                notice = take_notice(parse_qs(parts.query).get("result", [""])[0],
+                                     consume=not getattr(self, "_workspace_head", False))
                 self._respond(render_workspace(self._snapshot(), query=query,
                                                csrf_token=csrf_token, notice=notice), "text/html; charset=utf-8")
                 return
@@ -143,7 +217,7 @@ def create_workspace_server(root: Path, *, port: int = 8765) -> ThreadingHTTPSer
                     self._respond(render_not_found("Review item was not found."), "text/html; charset=utf-8", 404)
                     return
                 flash_id = parse_qs(parts.query).get("result", [""])[0]
-                notice = take_notice(flash_id)
+                notice = take_notice(flash_id, consume=not getattr(self, "_workspace_head", False))
                 self._respond(render_review(dossier, csrf_token, notice=notice), "text/html; charset=utf-8")
                 return
             match = re.fullmatch(r"/(projects|titles)/([^/]+)", parts.path)
@@ -156,7 +230,8 @@ def create_workspace_server(root: Path, *, port: int = 8765) -> ThreadingHTTPSer
                 snapshot = self._snapshot()
                 if kind == "titles" and snapshot is not None:
                     notice = parse_qs(parts.query).get("result", [""])[0]
-                    message = take_notice(notice) or ACTION_LABELS.get(parse_qs(parts.query).get("done", [""])[0], "")
+                    message = take_notice(notice, consume=not getattr(self, "_workspace_head", False)) or ACTION_LABELS.get(
+                        parse_qs(parts.query).get("done", [""])[0], "")
                     self._respond(render_title(snapshot, identifier, csrf_token=csrf_token, notice=message), "text/html; charset=utf-8",
                                   200 if identifier in snapshot["titles"] else 404)
                     return
@@ -164,36 +239,34 @@ def create_workspace_server(root: Path, *, port: int = 8765) -> ThreadingHTTPSer
                     if snapshot is None or not any(item["project_id"] == identifier for item in snapshot["projects"]):
                         self._respond(render_not_found(f"Project {identifier} was not found."), "text/html; charset=utf-8", 404)
                         return
-                    notice = take_notice(parse_qs(parts.query).get("result", [""])[0])
+                    notice = take_notice(parse_qs(parts.query).get("result", [""])[0],
+                                         consume=not getattr(self, "_workspace_head", False))
                     self._respond(render_workspace(snapshot, project_id=identifier,
                         csrf_token=csrf_token, notice=notice), "text/html; charset=utf-8")
                     return
             self._respond(render_not_found(), "text/html; charset=utf-8", 404)
 
         def do_HEAD(self) -> None:
-            if not self._valid_host():
-                self._respond(render_not_found("This workspace accepts requests for localhost only."),
-                              "text/html; charset=utf-8", 421, head=True)
-                return
-            parts = urlsplit(self.path)
-            if parts.path == "/healthz":
-                self._respond("ok", "text/plain; charset=utf-8", head=True)
-            elif parts.path == "/help":
-                self._respond(render_help(), "text/html; charset=utf-8", head=True)
-            elif parts.path in {"/", "/projects", "/titles"}:
-                self._respond(render_workspace(self._snapshot()), "text/html; charset=utf-8", head=True)
-            else:
-                self._respond(render_not_found(), "text/html; charset=utf-8", 404, head=True)
+            # Share GET routing and status decisions while suppressing the response body.
+            self._workspace_head = True
+            try:
+                self.do_GET()
+            finally:
+                self._workspace_head = False
 
         def do_POST(self) -> None:
             if not self._valid_host():
                 self._respond(render_not_found("This workspace accepts requests for localhost only."),
                               "text/html; charset=utf-8", 421)
                 return
-            origin = self.headers.get("Origin")
-            if origin and origin != f"http://{self.headers.get('Host')}":
+            if not self._same_origin_post():
                 self._respond(render_not_found("Request origin did not match this workspace."),
                               "text/html; charset=utf-8", 403)
+                return
+            operator_identity = self._operator_identity()
+            if operator_identity is _IDENTITY_MISSING:
+                self._respond(render_not_found("This workspace requires an authenticated operator."),
+                              "text/html; charset=utf-8", 401)
                 return
             path = urlsplit(self.path).path
             match = re.fullmatch(r"/titles/([^/]+)/actions/([a-z-]+)", path)
@@ -246,6 +319,10 @@ def create_workspace_server(root: Path, *, port: int = 8765) -> ThreadingHTTPSer
                 self._respond(render_not_found("Reload the Workspace and submit the form again."),
                               "text/html; charset=utf-8", 403)
                 return
+            if operator_identity is not None:
+                # Typed names are never authoritative when proxy identity is configured.
+                for field in ("operator", "reviewer", "creator", "builder", "approver"):
+                    form[field] = operator_identity
             if edit_match:
                 try:
                     result = create_manual_revision(root, title_id, asset_id, form)
@@ -264,8 +341,8 @@ def create_workspace_server(root: Path, *, port: int = 8765) -> ThreadingHTTPSer
                 self.send_response(303)
                 self.send_header("Location", f"/titles/{title_id}?result={flash_id}#pending")
                 self.send_header("Content-Length", "0")
-                self.send_header("Cache-Control", "no-store")
                 self.end_headers()
+                self._workspace_response_started = True
                 return
             if book_match or project_match:
                 try:
@@ -285,8 +362,8 @@ def create_workspace_server(root: Path, *, port: int = 8765) -> ThreadingHTTPSer
                 self.send_response(303)
                 self.send_header("Location", f"{location}?result={flash_id}")
                 self.send_header("Content-Length", "0")
-                self.send_header("Cache-Control", "no-store")
                 self.end_headers()
+                self._workspace_response_started = True
                 return
             if review_match:
                 try:
@@ -306,8 +383,8 @@ def create_workspace_server(root: Path, *, port: int = 8765) -> ThreadingHTTPSer
                 self.send_response(303)
                 self.send_header("Location", f"/reviews/{kind}/{identifier}?result={flash_id}")
                 self.send_header("Content-Length", "0")
-                self.send_header("Cache-Control", "no-store")
                 self.end_headers()
+                self._workspace_response_started = True
                 return
             try:
                 result = (run_authoring_action(root, title_id, action, form)
@@ -329,15 +406,15 @@ def create_workspace_server(root: Path, *, port: int = 8765) -> ThreadingHTTPSer
             else:
                 self.send_header("Location", f"/titles/{title_id}?done={action}#actions")
             self.send_header("Content-Length", "0")
-            self.send_header("Cache-Control", "no-store")
             self.end_headers()
+            self._workspace_response_started = True
 
         def _method_not_allowed(self) -> None:
             self.send_response(405)
             self.send_header("Allow", "GET, HEAD")
             self.send_header("Content-Length", "0")
-            self.send_header("Cache-Control", "no-store")
             self.end_headers()
+            self._workspace_response_started = True
 
         do_PUT = _method_not_allowed
         do_PATCH = _method_not_allowed

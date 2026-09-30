@@ -11,6 +11,31 @@ The **Help** link in the Workspace header opens a visual, plain-language guide a
 It takes a new creator from saving an idea through concept, planning, chapter drafting,
 verification, and release preparation without requiring CLI or server access.
 
+The current server requires an administrator-configured single operator account before the
+Workspace can be used. There is no public sign-up page or browser password-reset flow. Generate
+a password hash from a local console with:
+
+```powershell
+kdp workspace password-hash
+```
+
+The password is entered without echo and must be at least 14 characters. Generate a separate
+session-signing secret with `kdp workspace session-secret`. Configure both generated values
+and the chosen username in the service environment as `KDP_WORKSPACE_PASSWORD_HASH`,
+`KDP_WORKSPACE_SESSION_SECRET`, and `KDP_WORKSPACE_USERNAME`, then start or restart the
+Workspace. Keep the environment configuration in the operating system's protected secret
+store, outside the repository and project artefacts. Capture command output directly into a
+protected setting rather than leaving it in terminal scrollback. Changing either secret
+invalidates existing sessions.
+
+After signing in, actions are recorded under the configured username (or the trusted
+`KDP_WORKSPACE_OPERATOR_HEADER` identity when that additional proxy check is configured).
+The login offers a browser-session cookie that expires on browser close and on the server
+after 12 hours, or **Remember me** for 30 days. Cookies are `HttpOnly` and `SameSite=Strict`.
+For an HTTPS deployment set `KDP_WORKSPACE_COOKIE_SECURE=true`; this makes the browser require
+HTTPS to send the session cookie. If no account is configured, Workspace routes fail closed
+with a safe setup message. A partial or malformed configuration prevents server startup.
+
 The Workspace home page now starts with **Start a new book**. Enter a project name, working
 title, intended reader, and starting idea. Select a ready, priced provider and choose monthly
 and per-request USD hard limits. Creation saves a human-authored idea note, project, title,
@@ -48,8 +73,8 @@ The server binds only to `127.0.0.1` (port `8765` by default). Open the printed 
 in a browser and stop the server with `Ctrl+C`. Use `--port` to choose another local port.
 The Ubuntu staging installation keeps this loopback binding behind a Tailscale-bound proxy.
 Its URL, service names, and data boundary are recorded in the [environment runbook](ENVIRONMENTS.md).
-The proxy does not add an application login; access
-depends on Tailscale membership and ACLs.
+The current deployed staging revision must not be assumed to include this login feature until
+the reviewed code is deployed with a configured account and HTTPS cookie protection.
 The Workspace lists work needing review, approval, verification, or unblocking first, followed
 by ready titles, recent activity, projects, and titles. Project and title pages show the
 existing provider/budget, planning, chapter, editorial/canon, verification/rights, build, and
@@ -60,10 +85,9 @@ On a title page, **Workflow actions** can scan accepted chapters for Scripture p
 add verification flags or pending rights records, queue/pause/resume chapter work, build a
 Markdown manuscript, create a release candidate from a selected build, and export its review
 packet. Queue controls never draft chapters. Scanning does not verify Scripture or edit text.
-Builds and candidates retain blockers. The forms ask for an operator name where the audited
-service needs one; this name is an audit label, not authentication. The server is local only,
-uses a per-run form token, and rejects requests from a different origin. The Sprint 15 forms
-prepare work for the human review pages described below.
+Builds and candidates retain blockers. The Workspace records the signed-in account for
+auditable actions, uses per-run form protection, and rejects requests from a different origin.
+The Sprint 15 forms prepare work for the human review pages described below.
 
 ## Human review and approvals
 
@@ -88,9 +112,9 @@ release blockers. Canon proposals have explicit accept/reject choices; the exist
 records the decision and does not directly mutate the canon ledger. Release review has
 human checklist forms and explicit approve/hold/reject choices. Approval is disabled while
 blockers remain, and final KDP upload and publication stay manual. Verification and rights
-review pages use the existing human decision services and evidence requirements. There is
-no Workspace authentication; reviewer names are audit labels. Keep the local server on a
-trusted workstation.
+review pages use the existing human decision services and evidence requirements. All decisions
+remain human-gated. Keep local development on loopback; authentication does not replace HTTPS
+or restricting staging ingress to the intended operator.
 
 If the database is absent, the Workspace shows `kdp init-db` guidance and does not initialize
 the database itself.

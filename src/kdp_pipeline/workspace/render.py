@@ -22,6 +22,11 @@ def _review_link(kind: str, identifier: str, label: str | None = None) -> str:
             f'{_e(label or identifier)}</a>')
 
 
+def _actor_field(name: str = "operator") -> str:
+    return (f'<p class="muted actor-note">This action will be recorded under your signed-in account.</p>'
+            f'<input type="hidden" name="{_e(name)}" value="authenticated operator">')
+
+
 def _status(text: object, kind: str = "neutral") -> str:
     return f'<span class="status status-{_e(kind)}">{_e(text)}</span>'
 
@@ -230,7 +235,7 @@ def _start_form(snapshot: dict, token: str) -> str:
         'Creating the book makes no AI request; generation is a separate, confirmed step.</p>'
         '<form method="post" action="/books">'
         f'<input type="hidden" name="csrf_token" value="{_e(token)}">'
-        '<label>Your name<input name="operator" required maxlength="100"></label>'
+        + _actor_field() +
         '<label>Project name<input name="project_name" required maxlength="200" placeholder="A book or series workspace"></label>'
         '<label>Working book title<input name="title_name" required maxlength="200"></label>'
         '<label>Who is the book for?<textarea name="audience" required maxlength="1000" rows="2" placeholder="Reader age or stage, interests, and need"></textarea></label>'
@@ -250,14 +255,14 @@ def _project_forms(snapshot: dict, project_id: str, token: str) -> str:
     add_title = (
         f'<form method="post" action="/projects/{_e(quote(project_id, safe=""))}/actions/new-title">'
         f'<input type="hidden" name="csrf_token" value="{_e(token)}">'
-        '<label>Your name<input name="operator" required maxlength="100"></label>'
+        + _actor_field() +
         '<label>Working title<input name="title_name" required maxlength="200"></label>'
         '<button type="submit">Add title to this project</button></form>'
     )
     controls = (
         f'<form method="post" action="/projects/{_e(quote(project_id, safe=""))}/actions/controls">'
         f'<input type="hidden" name="csrf_token" value="{_e(token)}">'
-        '<label>Your name<input name="operator" required maxlength="100"></label>'
+        + _actor_field() +
         f'<label>Priced provider<select name="provider_id" required>{options}</select></label>'
         '<label>Monthly limit (USD)<input name="monthly_usd" type="number" min="0.01" step="0.01" required></label>'
         '<label>Per-request limit (USD)<input name="max_run_usd" type="number" min="0.01" step="0.01" required></label>'
@@ -335,7 +340,36 @@ def render_workspace(snapshot: dict | None, *, project_id: str | None = None, qu
         body = _workspace_content(snapshot, project_id, query[:100], csrf_token)
     if notice:
         body = f'<div class="action-notice {"action-error" if error else "action-success"}" role="status">{_e(notice)}</div>' + body
-    return _page("Workspace", body, query=query)
+    return _page("Workspace", body, query=query, csrf_token=csrf_token)
+
+
+def render_login(csrf_token: str, *, notice: str = "", error: bool = False,
+                 configured: bool = True, next_path: str = "/") -> str:
+    if not configured:
+        body = ('<section class="login-panel"><div class="login-mark" aria-hidden="true">K</div>'
+                '<h1>Workspace access is not configured</h1>'
+                '<p>Ask the system administrator to configure the operator account before opening the Workspace.</p>'
+                '</section>')
+        return _page("Access setup", body)
+    notice_html = (f'<p class="action-notice action-error" role="alert">{_e(notice)}</p>' if notice else '')
+    body = (
+        '<section class="login-panel"><div class="login-mark" aria-hidden="true">K</div>'
+        '<p class="login-kicker">KDP Pipeline</p><h1>Welcome back</h1>'
+        '<p class="login-intro">Sign in to continue to your book workspace.</p>' + notice_html +
+        '<form method="post" action="/login" class="login-form">'
+        f'<input type="hidden" name="csrf_token" value="{_e(csrf_token)}">'
+        f'<input type="hidden" name="next" value="{_e(next_path)}">'
+        '<label for="login-username">Username</label>'
+        '<input id="login-username" name="username" type="text" autocomplete="username" '
+        'autocapitalize="none" spellcheck="false" required maxlength="80">'
+        '<label for="login-password">Password</label>'
+        '<input id="login-password" name="password" type="password" autocomplete="current-password" required>'
+        '<label class="remember-choice"><input name="remember_me" type="checkbox" value="yes">'
+        '<span>Remember me on this device for 30 days</span></label>'
+        '<button class="primary-action" type="submit">Sign in</button></form>'
+        '<p class="login-footnote">Use “Remember me” only on a device you trust.</p></section>'
+    )
+    return _page("Sign in", body)
 
 
 def _section_cards(report: dict, title_id: str) -> dict[str, str]:
@@ -416,7 +450,7 @@ def _action_form(title_id: str, action: str, token: str, label: str, fields: str
 
 
 def _operator() -> str:
-    return '<label>Operator name<input name="operator" required maxlength="100" autocomplete="name"></label>'
+    return _actor_field()
 
 
 def _authoring_actions(report: dict, title_id: str, token: str) -> str:
@@ -528,7 +562,7 @@ def _workflow_actions(report: dict, title_id: str, token: str) -> str:
         if candidates else '<p class="empty-note">Create a release candidate first.</p>')
     return (
         '<section class="title-section workflow-actions" id="actions"><h2>Workflow actions</h2>'
-        '<p>Each action updates the local record through an audited service. Enter your name for actions that require an operator.</p>'
+        '<p>Each action updates the local record through an audited service. Actions are recorded under the signed-in account.</p>'
         '<div class="action-grid">'
         '<div class="action-group"><h3>Verification</h3><p>Queue placeholders from accepted chapters; this does not verify references or change manuscript text.</p>'
         + _action_form(title_id, "scan-scripture", token, "Scan Scripture placeholders")
@@ -595,10 +629,10 @@ def render_title(snapshot: dict, title_id: str, *, csrf_token: str = "", notice:
            if report.get("continuity", {}).get("warnings") else '<p class="empty-note">No continuity inspection warnings.</p>')
         + '</section>'
     )
-    return _page(title.get("working_title", "Title"), body)
+    return _page(title.get("working_title", "Title"), body, csrf_token=csrf_token)
 
 
-def render_help() -> str:
+def render_help(csrf_token: str = "") -> str:
     """Explain the browser authoring journey without exposing operator CLI steps."""
     body = (
         '<div class="help-page">'
@@ -692,7 +726,7 @@ def render_help() -> str:
         '</section><div class="help-end"><p>Ready to begin?</p>'
         '<a class="help-primary" href="/#start">Create your book</a></div></div>'
     )
-    return _page("Help: create a book", body)
+    return _page("Help: create a book", body, csrf_token=csrf_token)
 
 
 def render_not_found(message: str = "Page not found") -> str:
@@ -711,12 +745,12 @@ def render_chapter_edit(title_id: str, asset_id: str, content: str, source_hash:
         f'<form class="review-form" method="post" action="/titles/{_e(quote(title_id, safe=""))}/edit/{_e(quote(asset_id, safe=""))}">'
         f'<input type="hidden" name="csrf_token" value="{_e(token)}">'
         f'<input type="hidden" name="source_sha256" value="{_e(source_hash)}">'
-        '<label>Your name<input name="operator" required maxlength="100"></label>'
+        + _actor_field() +
         '<label>Reason for revision<textarea name="reason" required maxlength="2000" rows="2"></textarea></label>'
         f'<label>Complete revised content<textarea name="content" required maxlength="100000" rows="28">{_e(content)}</textarea></label>'
         '<button type="submit">Save experimental revision</button></form></section>'
     )
-    return _page("Edit artefact", body)
+    return _page("Edit artefact", body, csrf_token=csrf_token)
 
 
 def _review_list(items: list[str], empty: str) -> str:
@@ -742,7 +776,7 @@ def _release_checklist(dossier: dict, csrf_token: str) -> str:
             continue
         forms.append(f'<h3>{_e(heading)}</h3>')
         for key, value in pending:
-            fields = ('<label>Reviewer name<input name="reviewer" required maxlength="100"></label>'
+            fields = (_actor_field("reviewer") +
                       '<label>Decision<select name="decision"><option value="complete">Complete</option>'
                       '<option value="not_applicable">Not applicable</option></select></label>'
                       '<label>Rationale<textarea name="rationale" required maxlength="2000" rows="2"></textarea></label>'
@@ -821,7 +855,7 @@ def render_review(dossier: dict, csrf_token: str, *, notice: str = "", error: bo
         "verification": [("verified", "Mark verified"), ("not_verified", "Mark not verified"), ("not_applicable", "Mark not applicable")],
         "rights": [("cleared", "Clear rights"), ("restricted", "Mark restricted"), ("not_applicable", "Mark not applicable")],
     }[kind]
-    fields = '<label>Reviewer name<input name="reviewer" required maxlength="100" autocomplete="name"></label>'
+    fields = _actor_field("reviewer")
     if kind == "asset":
         mandatory = next((c for c in dossier["conditions"] if "[SCRIPTURE NEEDED]" in c), "")
         fields += ('<label>Approval conditions (one per line, maximum five)'
@@ -865,12 +899,28 @@ def render_review(dossier: dict, csrf_token: str, *, notice: str = "", error: bo
         + '<section class="title-section review-section" id="decision"><h2>7. Human decision</h2>'
         + decision_html + '</section>'
     )
-    return _page(f'Review {kind}', body)
+    return _page(f'Review {kind}', body, csrf_token=csrf_token)
 
 
-def _page(title: str, body: str, query: str = "") -> str:
+def _page(title: str, body: str, query: str = "", csrf_token: str = "") -> str:
     workspace_current = ' aria-current="page"' if title == "Workspace" else ""
     help_current = ' aria-current="page"' if title.startswith("Help:") else ""
+    private_entry = title in {"Sign in", "Access setup"}
+    logout = (f'<form method="post" action="/logout" class="logout-form">'
+              f'<input type="hidden" name="csrf_token" value="{_e(csrf_token)}">'
+              '<button type="submit">Sign out</button></form>' if csrf_token and not private_entry else '')
+    header_tools = ('' if private_entry else
+        '<div class="header-tools"><nav class="site-nav" aria-label="Main navigation">'
+        f'<a href="/"{workspace_current}>Workspace</a>'
+        f'<a href="/help"{help_current}>Help</a>'
+        '</nav><form action="/" method="get" role="search">'
+        f'<label class="visually-hidden" for="workspace-search">Search projects and titles</label><input id="workspace-search" name="q" type="search" value="{_e(query)}" placeholder="Search projects and titles">'
+        '<button type="submit">Search</button></form>'
+        '<label class="theme-label" for="theme-choice">Theme</label><select id="theme-choice" name="theme" aria-label="Choose workspace theme">'
+        '<option value="brand">Brand</option><option value="light">Light</option><option value="dark">Dark</option></select>'
+        + logout + '</div>')
+    footer_text = ('Access is limited to authorized operators.' if private_entry else
+                   'SQLite remains the system of record. Actions require an explicit operator; this workspace cannot approve or publish.')
     return (
         '<!doctype html><html lang="en"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
@@ -881,16 +931,9 @@ def _page(title: str, body: str, query: str = "") -> str:
         '<a class="skip-link" href="#main">Skip to content</a>'
         '<header class="app-header"><a class="wordmark" href="/" aria-label="KDP Pipeline Workspace home">'
         '<span class="mark" aria-hidden="true"><i></i><i></i><i></i></span><span>KDP Pipeline</span></a>'
-        '<div class="header-tools"><nav class="site-nav" aria-label="Main navigation">'
-        f'<a href="/"{workspace_current}>Workspace</a>'
-        f'<a href="/help"{help_current}>Help</a>'
-        '</nav><form action="/" method="get" role="search">'
-        f'<label class="visually-hidden" for="workspace-search">Search projects and titles</label><input id="workspace-search" name="q" type="search" value="{_e(query)}" placeholder="Search projects and titles">'
-        '<button type="submit">Search</button></form>'
-        '<label class="theme-label" for="theme-choice">Theme</label><select id="theme-choice" name="theme" aria-label="Choose workspace theme">'
-        '<option value="brand">Brand</option><option value="light">Light</option><option value="dark">Dark</option></select></div></header>'
+        + header_tools + '</header>'
         f'<main id="main">{body}</main>'
         '<footer class="app-footer"><span>Local operator workspace</span>'
-        '<span>SQLite remains the system of record. Actions require an explicit operator; this workspace cannot approve or publish.</span></footer>'
+        f'<span>{_e(footer_text)}</span></footer>'
         '</body></html>'
     )

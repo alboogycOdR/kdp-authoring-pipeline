@@ -29,7 +29,7 @@ Do not implement functionality from future sprints merely because it seems usefu
 
 ## Operating Environments
 
-Development runs in this Windows checkout. The `clawsrv` Ubuntu VPS hosts one staging installation with its own SQLite database and artefact directory. Read [the environment runbook](docs/operations/ENVIRONMENTS.md) before changing or deploying staging. The existing projects were migrated once; subsequent development and staging changes do not synchronize. The VPS Workspace is reachable only through Tailscale and has no application login; keep it off the public internet. Any future cross-platform data copy requires an explicit, integrity-checked migration.
+Development runs in this Windows checkout. The `clawsrv` Ubuntu VPS hosts one staging installation with its own SQLite database and artefact directory. Read [the environment runbook](docs/operations/ENVIRONMENTS.md) before changing or deploying staging. The existing projects were migrated once; subsequent development and staging changes do not synchronize. The deployed staging revision may not yet include the Workspace password login; never assume authentication is active until the service revision and protected account configuration are verified. Keep staging off the public internet and restrict access to Tailscale. Any future cross-platform data copy requires an explicit, integrity-checked migration.
 
 ## Mandatory design principles
 

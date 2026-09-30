@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from http.client import HTTPConnection
 from pathlib import Path
 from threading import Thread
+from workspace_test_helpers import HTTPConnection
 
 from kdp_pipeline.storage.service import create_project, create_title
 from kdp_pipeline.providers.configuration import add_provider_profile, select_provider_for_project
@@ -108,6 +108,11 @@ def test_workspace_server_is_loopback_read_only_and_serves_packaged_assets(tmp_p
         assert 'body[data-theme="light"]' in css
         assert 'body[data-theme="dark"]' in css
         assert 'body[data-theme="brand"]' in css
+        assert "--accent: #000000" in css
+        assert "--brand-orange: #ff940b" in css
+        assert "--action-bg: #ff940b" in css
+        assert "--action-ink: #000000" in css
+        assert "--blocked:" in css and "--ready:" in css
 
         connection.request("POST", "/", headers={"Sec-Fetch-Site": "same-origin"})
         response = connection.getresponse()

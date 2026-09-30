@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 import asyncio
 import json
+from getpass import getpass
+import secrets
 import typer
 from sqlalchemy import select
 
@@ -21,6 +23,7 @@ from kdp_pipeline.verification import (add_verification_flag, decide_rights_reco
     decide_verification, record_rights, scan_scripture_placeholders)
 from kdp_pipeline.workspace import generate_dashboard
 from kdp_pipeline.workspace.server import create_workspace_server
+from kdp_pipeline.workspace.auth import hash_password
 from kdp_pipeline.models.planning import PlanningArtifactKind
 from kdp_pipeline.planning import PlanningService, accept_planning_artifact
 from kdp_pipeline.release import (create_release_candidate, export_release_packet,
@@ -1035,6 +1038,26 @@ def workspace_serve(
     finally:
         if server is not None:
             server.server_close()
+
+
+@workspace_app.command("password-hash")
+def workspace_password_hash():
+    """Generate a slow password hash without echoing the password."""
+    try:
+        first = getpass("Workspace password (14+ characters): ")
+        second = getpass("Confirm workspace password: ")
+        if first != second:
+            raise ValueError("Passwords did not match.")
+        typer.echo(hash_password(first))
+    except (ValueError, OSError) as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2)
+
+
+@workspace_app.command("session-secret")
+def workspace_session_secret():
+    """Generate a random signing secret for persistent Workspace sessions."""
+    typer.echo(secrets.token_urlsafe(48))
 
 
 if __name__ == "__main__":

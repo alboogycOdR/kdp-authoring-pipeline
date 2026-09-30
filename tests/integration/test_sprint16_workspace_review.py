@@ -4,9 +4,9 @@ import asyncio
 import json
 import re
 import shutil
-from http.client import HTTPConnection
 from pathlib import Path
 from threading import Thread
+from workspace_test_helpers import HTTPConnection
 from urllib.parse import urlencode
 
 import pytest

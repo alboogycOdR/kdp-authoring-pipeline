@@ -13,12 +13,24 @@ authorized Tailscale user
 
 Tailscale Serve supplies `Tailscale-User-Login` for user-identity devices and removes client-supplied identity headers. Configure the Workspace with `KDP_WORKSPACE_OPERATOR_HEADER=Tailscale-User-Login`. Tailscale does not populate that identity for tagged client devices, so those devices must not be used to authenticate operator actions. The app and Caddy listeners must remain on loopback; do not bind either to a LAN or Tailscale interface.
 
+The current Workspace code also requires a configured username, scrypt password hash, and
+random session-signing secret in the
+owner-only `/home/clawusr/.config/kdp-workspace/auth.env` environment file. Generate the hash
+with `kdp-staging workspace password-hash` over an administrator terminal; enter the password
+at the hidden prompt. Generate the signing key with `kdp-staging workspace session-secret`.
+Place the username, hash, and key in that file. Keep command output out of terminal scrollback.
+The unit
+template loads that file and enables `KDP_WORKSPACE_COOKIE_SECURE=true`. This requires the
+browser-facing route to use HTTPS; do not deploy the login over plain HTTP. App password login
+and Tailscale identity are separate controls. The current staging installation remains on its
+existing code and ingress until a reviewed deployment and HTTPS route are deliberately applied.
+
 ## Required operator gates
 
 1. In Tailscale Access Controls, verify or set a least-privilege policy allowing only the named operator's user-identity devices to reach `clawsrv` TCP 8767. Remove broad member-wide grants for this port. Confirm the operator's client devices are not tagged. The current policy is not visible from the VPS and was not verified during G5.
 2. Select and review an integrated, immutable application revision before deployment. The staging checkout currently has local modifications; do not overwrite them with `git pull`, branch checkout, or an unreviewed copy.
 3. Take a paired SQLite and `projects/` backup, record its hash manifest, verify SQLite integrity and asset hashes, and verify a restore copy before changing routing or restarting the application.
-4. Install these templates with owner-only permissions. Set `KDP_STAGING_FQDN` in `/home/clawusr/.config/kdp-workspace/proxy.env` to the machine's MagicDNS FQDN. Keep the provider key in its existing out-of-repository secret file; never place it in these templates or unit files.
+4. Install these templates with owner-only permissions. Set `KDP_STAGING_FQDN` in `/home/clawusr/.config/kdp-workspace/proxy.env` to the machine's MagicDNS FQDN. Create `/home/clawusr/.config/kdp-workspace/auth.env` with mode `0600` and the configured Workspace username, generated password hash, and random session secret. Keep the provider key in its existing out-of-repository secret file; never place credentials in templates or the repository.
 5. Validate the Caddyfile and user units, including their effective systemd sandbox settings, before restart. The loopback app must be configured to trust only the Tailscale identity header.
 6. Only after the ACL and backup gates pass, add a Tailscale Serve HTTPS route to the loopback Caddy port:
 

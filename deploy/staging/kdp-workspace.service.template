@@ -5,7 +5,9 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=/home/clawusr/apps/kdp-authoring-pipeline
+EnvironmentFile=/home/clawusr/.config/kdp-workspace/auth.env
 Environment=KDP_WORKSPACE_OPERATOR_HEADER=Tailscale-User-Login
+Environment=KDP_WORKSPACE_COOKIE_SECURE=true
 Environment=KDP_PROVIDER_HOST_ALLOWLIST=api.openai.com
 UnsetEnvironment=HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy
 ExecStart=/home/clawusr/.local/bin/kdp-staging workspace serve --root /home/clawusr/apps/kdp-authoring-pipeline --port 8766

@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.cookies import SimpleCookie
 from importlib.resources import files
 import logging
 import os
 from pathlib import Path
 from threading import Lock
-from urllib.parse import parse_qs, unquote, urlsplit
+import time
+from urllib.parse import parse_qs, quote, unquote, urlsplit
 import re
 import secrets
 
@@ -14,7 +16,8 @@ from kdp_pipeline.workspace.actions import ACTION_LABELS, run_action, run_releas
 from kdp_pipeline.workspace.authoring import (AUTHORING_ACTIONS, create_book,
     create_manual_revision, read_edit_source, run_authoring_action, run_project_action)
 from kdp_pipeline.workspace.inspection import inspect_workspace
-from kdp_pipeline.workspace.render import (render_chapter_edit, render_not_found,
+from kdp_pipeline.workspace.auth import WorkspaceAuth
+from kdp_pipeline.workspace.render import (render_chapter_edit, render_login, render_not_found,
     render_help, render_review, render_title, render_workspace)
 from kdp_pipeline.workspace.review import inspect_review
 
@@ -48,6 +51,17 @@ def create_workspace_server(root: Path, *, port: int = 8765) -> ThreadingHTTPSer
         if not _HEADER_NAME.fullmatch(configured_identity_header):
             raise ValueError("KDP_WORKSPACE_OPERATOR_HEADER must be a valid HTTP header name")
     csrf_token = secrets.token_urlsafe(32)
+    auth = WorkspaceAuth.from_environment()
+    secure_cookie = os.environ.get("KDP_WORKSPACE_COOKIE_SECURE", "false").strip().casefold()
+    if secure_cookie not in {"true", "false"}:
+        raise ValueError("KDP_WORKSPACE_COOKIE_SECURE must be true or false")
+    secure_cookie_enabled = secure_cookie == "true"
+    session_cookie_name = "__Host-KDPWorkspace" if secure_cookie_enabled else "KDPWorkspace"
+    login_failures: dict[str, list[float]] = {}
+    login_lock = Lock()
+    password_check_lock = Lock()
+    max_login_failures = 5
+    login_window_seconds = 15 * 60
     flash: dict[str, str] = {}
     flash_lock = Lock()
 
@@ -64,6 +78,26 @@ def create_workspace_server(root: Path, *, port: int = 8765) -> ThreadingHTTPSer
             if consume:
                 return flash.pop(flash_id, "")
             return flash.get(flash_id, "")
+
+    def login_allowed(client: str) -> bool:
+        now = time.monotonic()
+        with login_lock:
+            recent = [stamp for stamp in login_failures.get(client, [])
+                      if now - stamp < login_window_seconds]
+            login_failures[client] = recent
+            return len(recent) < max_login_failures
+
+    def record_login_failure(client: str) -> None:
+        now = time.monotonic()
+        with login_lock:
+            recent = [stamp for stamp in login_failures.get(client, [])
+                      if now - stamp < login_window_seconds]
+            recent.append(now)
+            login_failures[client] = recent
+
+    def clear_login_failures(client: str) -> None:
+        with login_lock:
+            login_failures.pop(client, None)
 
     class WorkspaceHandler(BaseHTTPRequestHandler):
         server_version = "KDPWorkspace"
@@ -117,17 +151,76 @@ def create_workspace_server(root: Path, *, port: int = 8765) -> ThreadingHTTPSer
                 return _IDENTITY_MISSING
             return identity
 
+        def _session_username(self) -> str | None:
+            cookie_headers = self.headers.get_all("Cookie", [])
+            if len(cookie_headers) > 1:
+                return None
+            parsed = SimpleCookie()
+            try:
+                if cookie_headers:
+                    parsed.load(cookie_headers[0])
+            except Exception:  # noqa: BLE001 — malformed browser cookie is unauthenticated.
+                return None
+            morsel = parsed.get(session_cookie_name)
+            return auth.validate(morsel.value) if morsel is not None else None
+
+        def _read_form(self, *, max_size: int = 16384) -> dict[str, str] | None:
+            if self.headers.get("Content-Type", "").split(";", 1)[0].strip().lower() != "application/x-www-form-urlencoded":
+                self._respond(render_not_found("Submit a Workspace form to run this action."),
+                              "text/html; charset=utf-8", 415)
+                return None
+            try:
+                size = int(self.headers.get("Content-Length", ""))
+            except ValueError:
+                size = -1
+            if size < 0 or size > max_size:
+                self._respond(render_not_found("Form size is invalid."), "text/html; charset=utf-8", 413)
+                return None
+            try:
+                values = parse_qs(self.rfile.read(size).decode("utf-8", errors="strict"),
+                                  keep_blank_values=True, max_num_fields=24, strict_parsing=True)
+                if any(len(items) != 1 for items in values.values()):
+                    raise ValueError("Form contains duplicate fields.")
+                return {key: items[0] for key, items in values.items()}
+            except (UnicodeDecodeError, ValueError):
+                self._respond(render_not_found("Form data is invalid."), "text/html; charset=utf-8", 400)
+                return None
+
+        def _set_session_cookie(self, token: str, duration: int | None = None) -> None:
+            value = f"{session_cookie_name}={token}; Path=/; HttpOnly; SameSite=Strict"
+            if secure_cookie_enabled:
+                value += "; Secure"
+            if duration is not None:
+                value += f"; Max-Age={duration}"
+            self.send_header("Set-Cookie", value)
+
+        def _clear_session_cookie(self) -> None:
+            value = f"{session_cookie_name}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0"
+            if secure_cookie_enabled:
+                value += "; Secure"
+            self.send_header("Set-Cookie", value)
+
+        def _redirect_to_login(self) -> None:
+            destination = urlsplit(self.path).path[:512]
+            location = "/login" if destination == "/login" else f"/login?next={quote(destination, safe='/')}"
+            self.send_response(303)
+            self.send_header("Location", location)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            self._workspace_response_started = True
+
         def _same_origin_post(self) -> bool:
             host_values = self.headers.get_all("Host", [])
             origin_values = self.headers.get_all("Origin", [])
             fetch_site_values = self.headers.get_all("Sec-Fetch-Site", [])
             if len(host_values) != 1 or len(origin_values) > 1 or len(fetch_site_values) > 1:
                 return False
+            if fetch_site_values and fetch_site_values[0].strip().lower() not in {"same-origin", "none"}:
+                return False
             expected_origin = f"http://{host_values[0]}"
             if origin_values:
                 return origin_values[0].strip() == expected_origin
-            fetch_site = fetch_site_values[0].strip().lower() if fetch_site_values else ""
-            return fetch_site in {"same-origin", "none"}
+            return bool(fetch_site_values)
 
         def _respond(self, body: str | bytes, content_type: str, status: int = 200, *, head: bool = False) -> None:
             head = head or getattr(self, "_workspace_head", False)
@@ -173,8 +266,35 @@ def create_workspace_server(root: Path, *, port: int = 8765) -> ThreadingHTTPSer
             if parts.path == "/healthz":
                 self._respond("ok", "text/plain; charset=utf-8")
                 return
+            if parts.path == "/login":
+                if not auth.configured:
+                    self._respond(render_login(csrf_token, configured=False), "text/html; charset=utf-8", 503)
+                    return
+                username = self._session_username()
+                if username:
+                    self.send_response(303)
+                    self.send_header("Location", "/")
+                    self.send_header("Content-Length", "0")
+                    self.end_headers()
+                    self._workspace_response_started = True
+                    return
+                try:
+                    next_path = parse_qs(parts.query, keep_blank_values=False, max_num_fields=4).get("next", ["/"])[0]
+                except ValueError:
+                    next_path = "/"
+                if not next_path.startswith("/") or next_path.startswith("//") or "\\" in next_path:
+                    next_path = "/"
+                self._respond(render_login(csrf_token, next_path=next_path[:512]), "text/html; charset=utf-8")
+                return
+            username = self._session_username()
+            if not auth.configured:
+                self._respond(render_login(csrf_token, configured=False), "text/html; charset=utf-8", 503)
+                return
+            if username is None:
+                self._redirect_to_login()
+                return
             if parts.path == "/help":
-                self._respond(render_help(), "text/html; charset=utf-8")
+                self._respond(render_help(csrf_token), "text/html; charset=utf-8")
                 return
             try:
                 query = parse_qs(parts.query, keep_blank_values=False, max_num_fields=8).get("q", [""])[0][:100]
@@ -263,12 +383,67 @@ def create_workspace_server(root: Path, *, port: int = 8765) -> ThreadingHTTPSer
                 self._respond(render_not_found("Request origin did not match this workspace."),
                               "text/html; charset=utf-8", 403)
                 return
+            path = urlsplit(self.path).path
+            if path == "/login":
+                form = self._read_form()
+                if form is None:
+                    return
+                if not secrets.compare_digest(form.get("csrf_token", ""), csrf_token):
+                    self._respond(render_login(csrf_token, notice="Reload the sign-in page and try again.", error=True),
+                                  "text/html; charset=utf-8", 403)
+                    return
+                client = self.client_address[0]
+                if not login_allowed(client):
+                    self._respond(render_login(csrf_token, notice="Too many sign-in attempts. Wait 15 minutes and try again.", error=True),
+                                  "text/html; charset=utf-8", 429)
+                    return
+                with password_check_lock:
+                    valid_credentials = auth.verify(form.get("username", ""), form.get("password", ""))
+                if not valid_credentials:
+                    record_login_failure(client)
+                    self._respond(render_login(csrf_token, notice="Username or password was not recognized.", error=True),
+                                  "text/html; charset=utf-8", 401)
+                    return
+                clear_login_failures(client)
+                remember = form.get("remember_me") == "yes"
+                token, duration = auth.issue(remember=remember)
+                destination = form.get("next", "/")
+                if not destination.startswith("/") or destination.startswith("//") or "\\" in destination:
+                    destination = "/"
+                self.send_response(303)
+                self._set_session_cookie(token, duration if remember else None)
+                self.send_header("Location", destination[:512])
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                self._workspace_response_started = True
+                return
+            username = self._session_username()
+            if not auth.configured:
+                self._respond(render_login(csrf_token, configured=False), "text/html; charset=utf-8", 503)
+                return
+            if username is None:
+                self._redirect_to_login()
+                return
             operator_identity = self._operator_identity()
             if operator_identity is _IDENTITY_MISSING:
                 self._respond(render_not_found("This workspace requires an authenticated operator."),
                               "text/html; charset=utf-8", 401)
                 return
-            path = urlsplit(self.path).path
+            if path == "/logout":
+                form = self._read_form()
+                if form is None:
+                    return
+                if not secrets.compare_digest(form.get("csrf_token", ""), csrf_token):
+                    self._respond(render_not_found("Reload the Workspace and submit the form again."),
+                                  "text/html; charset=utf-8", 403)
+                    return
+                self.send_response(303)
+                self._clear_session_cookie()
+                self.send_header("Location", "/login")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                self._workspace_response_started = True
+                return
             match = re.fullmatch(r"/titles/([^/]+)/actions/([a-z-]+)", path)
             project_match = re.fullmatch(r"/projects/([^/]+)/actions/(controls|new-title)", path)
             edit_match = re.fullmatch(r"/titles/([^/]+)/edit/([^/]+)", path)
@@ -295,25 +470,8 @@ def create_workspace_server(root: Path, *, port: int = 8765) -> ThreadingHTTPSer
             if not valid_route:
                 self._respond(render_not_found(), "text/html; charset=utf-8", 404)
                 return
-            if self.headers.get("Content-Type", "").split(";", 1)[0].strip().lower() != "application/x-www-form-urlencoded":
-                self._respond(render_not_found("Submit a Workspace form to run this action."),
-                              "text/html; charset=utf-8", 415)
-                return
-            try:
-                size = int(self.headers.get("Content-Length", ""))
-            except ValueError:
-                size = -1
-            if size < 0 or size > (200000 if edit_match else 16384):
-                self._respond(render_not_found("Form size is invalid."), "text/html; charset=utf-8", 413)
-                return
-            try:
-                values = parse_qs(self.rfile.read(size).decode("utf-8", errors="strict"),
-                                  keep_blank_values=True, max_num_fields=24, strict_parsing=True)
-                if any(len(items) != 1 for items in values.values()):
-                    raise ValueError("Form contains duplicate fields.")
-                form = {key: items[0] for key, items in values.items()}
-            except (UnicodeDecodeError, ValueError):
-                self._respond(render_not_found("Form data is invalid."), "text/html; charset=utf-8", 400)
+            form = self._read_form(max_size=200000 if edit_match else 16384)
+            if form is None:
                 return
             if not secrets.compare_digest(form.get("csrf_token", ""), csrf_token):
                 self._respond(render_not_found("Reload the Workspace and submit the form again."),
@@ -323,6 +481,10 @@ def create_workspace_server(root: Path, *, port: int = 8765) -> ThreadingHTTPSer
                 # Typed names are never authoritative when proxy identity is configured.
                 for field in ("operator", "reviewer", "creator", "builder", "approver"):
                     form[field] = operator_identity
+            else:
+                # The authenticated account, rather than a form field, supplies the audit identity.
+                for field in ("operator", "reviewer", "creator", "builder", "approver"):
+                    form[field] = username
             if edit_match:
                 try:
                     result = create_manual_revision(root, title_id, asset_id, form)

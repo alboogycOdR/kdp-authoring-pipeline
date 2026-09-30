@@ -3,10 +3,10 @@ from __future__ import annotations
 import asyncio
 import re
 import shutil
-from http.client import HTTPConnection
 from pathlib import Path
 from threading import Thread
 from urllib.parse import urlencode
+from workspace_test_helpers import HTTPConnection
 
 from kdp_pipeline.chapter import ChapterService, accept_chapter
 from kdp_pipeline.context import ContextManifest

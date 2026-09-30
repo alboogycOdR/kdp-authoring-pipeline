@@ -3,10 +3,10 @@ from __future__ import annotations
 import logging
 import re
 import sqlite3
-from http.client import HTTPConnection
 from pathlib import Path
 from threading import Thread
 from urllib.parse import urlencode
+from workspace_test_helpers import HTTPConnection
 
 import pytest
 
@@ -82,6 +82,21 @@ def test_workspace_limits_idle_connection_timeout_and_logs_only_url_path(tmp_pat
                    if record.name == "kdp_pipeline.workspace.access"]
         assert any("GET /help 200" in record for record in records)
         assert all("private-search-term" not in record for record in records)
+    finally:
+        server.shutdown()
+        thread.join(timeout=3)
+        server.server_close()
+
+
+def test_workspace_rejects_cross_site_fetch_even_if_proxy_normalizes_origin(tmp_path: Path):
+    server = create_workspace_server(tmp_path, port=0)
+    thread = _serve(server)
+    try:
+        port = server.server_address[1]
+        status, _, _ = _request(server, "POST", "/", body={}, headers={
+            "Origin": f"http://127.0.0.1:{port}", "Sec-Fetch-Site": "cross-site",
+        })
+        assert status == 403
     finally:
         server.shutdown()
         thread.join(timeout=3)

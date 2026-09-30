@@ -352,7 +352,8 @@ def create_workspace_server(root: Path, *, port: int = 8765) -> ThreadingHTTPSer
                     notice = parse_qs(parts.query).get("result", [""])[0]
                     message = take_notice(notice, consume=not getattr(self, "_workspace_head", False)) or ACTION_LABELS.get(
                         parse_qs(parts.query).get("done", [""])[0], "")
-                    self._respond(render_title(snapshot, identifier, csrf_token=csrf_token, notice=message), "text/html; charset=utf-8",
+                    view = parse_qs(parts.query).get("view", ["overview"])[0]
+                    self._respond(render_title(snapshot, identifier, csrf_token=csrf_token, notice=message, view=view), "text/html; charset=utf-8",
                                   200 if identifier in snapshot["titles"] else 404)
                     return
                 if kind == "projects":
@@ -522,7 +523,7 @@ def create_workspace_server(root: Path, *, port: int = 8765) -> ThreadingHTTPSer
                     return
                 flash_id = save_notice(message)
                 self.send_response(303)
-                self.send_header("Location", f"{location}?result={flash_id}")
+                self.send_header("Location", f"{location}?result={flash_id}&view=journey" if book_match else f"{location}?result={flash_id}")
                 self.send_header("Content-Length", "0")
                 self.end_headers()
                 self._workspace_response_started = True
@@ -564,9 +565,10 @@ def create_workspace_server(root: Path, *, port: int = 8765) -> ThreadingHTTPSer
             self.send_response(303)
             if action in AUTHORING_ACTIONS:
                 flash_id = save_notice(result)
-                self.send_header("Location", f"/titles/{title_id}?result={flash_id}#authoring")
+                self.send_header("Location", f"/titles/{title_id}?result={flash_id}&view=journey#authoring")
             else:
-                self.send_header("Location", f"/titles/{title_id}?done={action}#actions")
+                view = "checks" if action in {"scan-scripture", "add-flag", "add-rights"} else ("release" if action in {"build-manuscript", "create-candidate", "export-packet"} else "journey")
+                self.send_header("Location", f"/titles/{title_id}?done={action}&view={view}#actions")
             self.send_header("Content-Length", "0")
             self.end_headers()
             self._workspace_response_started = True

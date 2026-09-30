@@ -253,7 +253,7 @@ def inspect_review(root: Path, kind: str, identifier: str) -> dict | None:
                     provenance.append(_provenance(prov))
             can_decide = status == "pending"
             consequence = ("A human verification decision records evidence and rationale. "
-                           "It does not insert Scripture text or modify the accepted chapter. "
+                           "It does not insert source text or modify the accepted chapter. "
                            "A remaining [SCRIPTURE NEEDED] placeholder continues to block release until a separate verified manuscript update resolves it.")
         else:
             status = row.status

@@ -567,7 +567,7 @@ def _authoring_actions(report: dict, title_id: str, token: str) -> str:
             + cost_note + '<div class="action-grid">' + concept + planning + drafting + '</div></section>')
 
 
-def _workflow_actions(report: dict, title_id: str, token: str) -> str:
+def _workflow_actions(report: dict, title_id: str, token: str, *, mode: str = "all") -> str:
     if not token:
         return ""
     flag_fields = (_operator() + '<label>Kind<select name="kind">'
@@ -595,29 +595,63 @@ def _workflow_actions(report: dict, title_id: str, token: str) -> str:
     packet_form = (_action_form(title_id, "export-packet", token, "Export review packet",
         _operator() + f'<label>Release candidate<select name="candidate_id" required>{candidate_options}</select></label>')
         if candidates else '<p class="empty-note">Create a release candidate first.</p>')
-    return (
-        '<section class="title-section workflow-actions" id="actions"><h2>Workflow actions</h2>'
-        '<p>Each action updates the local record through an audited service. Actions are recorded under the signed-in account.</p>'
-        '<div class="action-grid">'
-        '<div class="action-group"><h3>Verification checks</h3><p>Run checks on accepted chapters and record human decisions. Checks never change manuscript text or verify a source automatically.</p>'
-        + _action_form(title_id, "scan-scripture", token, "Scan manuscript placeholders")
-        + '<p class="muted verification-note">This scan currently queues Scripture placeholders when they are present. Use verification flags for sources, claims, research, and other checks.</p>'
-        + '<details><summary>Add a verification flag</summary>'
-        + _action_form(title_id, "add-flag", token, "Add flag", flag_fields) + '</details>'
-        + '<details><summary>Record rights material</summary>'
-        + _action_form(title_id, "add-rights", token, "Add rights record", rights_fields) + '</details></div>'
-        '<div class="action-group"><h3>Chapter queue</h3><p>Queue at most ten chapters. Queueing and resuming do not generate content.</p>'
-        + _action_form(title_id, "queue-chapters", token, "Queue chapters", queue_fields)
-        + _action_form(title_id, "pause-queue", token, "Pause queued chapters", _operator())
-        + _action_form(title_id, "resume-queue", token, "Resume paused chapters", _operator()) + '</div>'
-        '<div class="action-group"><h3>Manuscript build</h3><p>Assemble accepted chapters in Markdown. Unresolved conditions keep the build blocked.</p>'
-        + _action_form(title_id, "build-manuscript", token, "Create Markdown build", _operator()) + '</div>'
-        '<div class="action-group"><h3>Release preparation</h3><p>Freeze a build into a candidate and export a review packet. These actions never approve or publish.</p>'
-        + candidate_form + packet_form + '</div></div></section>'
+    groups = {
+        "checks": ('<div class="action-group"><h3>Checks and rights</h3><p>Run checks on accepted chapters and record human decisions. Checks never change manuscript text or verify a source automatically.</p>'
+                    + _action_form(title_id, "scan-scripture", token, "Scan accepted manuscript")
+                    + '<p class="muted verification-note">This queues items for human verification. Add flags for sources, claims, research, quotations, or other checks that your book needs.</p>'
+                    + '<details><summary>Add a verification flag</summary>'
+                    + _action_form(title_id, "add-flag", token, "Add verification flag", flag_fields) + '</details>'
+                    + '<details><summary>Record rights material</summary>'
+                    + _action_form(title_id, "add-rights", token, "Add rights record", rights_fields) + '</details></div>'),
+        "journey": ('<div class="action-group"><h3>Chapter queue</h3><p>Queue at most ten chapters. Queueing and resuming do not generate content.</p>'
+                     + _action_form(title_id, "queue-chapters", token, "Queue chapters", queue_fields)
+                     + _action_form(title_id, "pause-queue", token, "Pause queued chapters", _operator())
+                     + _action_form(title_id, "resume-queue", token, "Resume paused chapters", _operator()) + '</div>'),
+        "release": ('<div class="action-group"><h3>Manuscript build</h3><p>Assemble accepted chapters in Markdown. Unresolved conditions keep the build blocked.</p>'
+                     + _action_form(title_id, "build-manuscript", token, "Create Markdown build", _operator()) + '</div>'
+                     '<div class="action-group"><h3>Release preparation</h3><p>Freeze a build into a candidate and export a review packet. These actions never approve or publish.</p>'
+                     + candidate_form + packet_form + '</div>'),
+    }
+    selected = ("checks", "journey", "release") if mode == "all" else (mode,)
+    content = ''.join(groups[key] for key in selected if key in groups)
+    return ('<section class="title-section workflow-actions" id="actions"><h2>Workflow actions</h2>'
+            '<p>Each action updates the local record through an audited service. Actions are recorded under the signed-in account.</p>'
+            '<div class="action-grid">' + content + '</div></section>')
+
+
+def _title_view_cards(report: dict, title_id: str, active_view: str) -> str:
+    verification = report.get("verification", {})
+    builds = report.get("builds", {}).get("records", [])
+    release = report.get("release", {}).get("candidates", [])
+    cards = (
+        ("journey", "Authoring journey", "Shape the idea, plan the book, and draft one chapter at a time.", "Open authoring"),
+        ("review", "Review decisions", "Read results, findings, and conditions before accepting anything.", "Open review"),
+        ("checks", "Checks and rights", f"Resolve {len(verification.get('release_blockers', []))} open verification or rights item(s).", "Open checks"),
+        ("release", "Build and release", f"{len(builds)} build(s) · {len(release)} release candidate(s).", "Open release"),
     )
+    return ('<section class="title-section focus-cards" aria-labelledby="focus-title">'
+            '<div class="section-heading"><div><p class="eyebrow">Choose a workspace</p>'
+            '<h2 id="focus-title">What do you need to do?</h2></div>'
+            '<p class="muted">Each workspace keeps the next decision in view and leaves the rest available when you need it.</p></div>'
+            '<div class="focus-card-grid">' + ''.join(
+                f'<a class="focus-card{" focus-card-active" if active_view == key else ""}" href="/titles/{_e(quote(title_id, safe=""))}?view={key}#title-workspace">'
+                f'<span class="focus-card-index">{index}</span><strong>{_e(label)}</strong><span>{_e(copy)}</span><em>{_e(link)}</em></a>'
+                for index, (key, label, copy, link) in enumerate(cards, 1)
+            ) + '</div></section>')
 
 
-def render_title(snapshot: dict, title_id: str, *, csrf_token: str = "", notice: str = "", error: bool = False) -> str:
+def _recent_jobs(report: dict) -> str:
+    return ('<section class="title-section" id="jobs"><h2>Recent jobs</h2>'
+            '<p>Check the result and usage before starting another paid request. If a connection fails, inspect the job before retrying.</p>'
+            + _records([
+                f'<li><strong>{_e(job.get("job_id"))}</strong><span>{_e(job.get("job_type"))} · '
+                f'{_e(job.get("error") or job.get("provider_billing_warning") or job.get("usage_event_id") or "No usage event")}</span>'
+                f'{_status(job.get("status"), "ready" if job.get("status") == "success" else "blocked")}</li>'
+                for job in reversed(report.get("jobs", [])[-8:])], "No jobs recorded yet.") + '</section>')
+
+
+def render_title(snapshot: dict, title_id: str, *, csrf_token: str = "", notice: str = "", error: bool = False,
+                 view: str = "overview") -> str:
     report = snapshot.get("titles", {}).get(title_id)
     if not report:
         return _page("Title not found", _empty_workspace(f"Title {title_id} was not found."))
@@ -628,40 +662,63 @@ def render_title(snapshot: dict, title_id: str, *, csrf_token: str = "", notice:
     blocked_builds = [row for row in report.get("builds", {}).get("records", []) if row.get("status") == "blocked"]
     blocked_release = [row for row in report.get("release", {}).get("candidates", []) if row.get("status") in {"blocked", "stale", "held"}]
     attention_label = "No active blockers surfaced" if not blockers and not blocked_builds and not blocked_release else f"{len(blockers) + len(blocked_builds) + len(blocked_release)} items need attention"
+    active_view = view if view in {"overview", "journey", "review", "checks", "release", "all"} else "overview"
+    view_links = ''.join(
+        f'<a class="{"active" if active_view == key else ""}" href="/titles/{_e(quote(title_id, safe=""))}?view={key}#title-workspace">{_e(label)}</a>'
+        for key, label in (("overview", "Overview"), ("journey", "Authoring journey"),
+                           ("review", "Review decisions"), ("checks", "Checks and rights"),
+                           ("release", "Build and release"), ("all", "All records")))
+    section_html: list[str] = []
+    if active_view == "overview":
+        section_html.extend([
+            _title_view_cards(report, title_id, active_view),
+            '<section class="title-section orientation-note"><h2>How this page works</h2>'
+            '<p>Start with the workspace that matches your next task. Your records, review evidence, and safety conditions stay in the other workspaces.</p></section>',
+        ])
+    elif active_view == "journey":
+        section_html.extend([_authoring_actions(report, title_id, csrf_token), _recent_jobs(report)])
+    elif active_view == "review":
+        section_html.extend([
+            f'<section class="title-section" id="pending"><h2>Awaiting acceptance</h2>{sections["pending"]}</section>',
+            f'<section class="title-section" id="editorial"><h2>Editorial and canon</h2>{sections["editorial"]}</section>',
+        ])
+    elif active_view == "checks":
+        section_html.extend([
+            _workflow_actions(report, title_id, csrf_token, mode="checks"),
+            f'<section class="title-section" id="verification"><h2>Checks and rights record</h2>{sections["verification"]}</section>',
+        ])
+    elif active_view == "release":
+        section_html.extend([
+            _workflow_actions(report, title_id, csrf_token, mode="release"),
+            f'<section class="title-section" id="builds"><h2>Builds</h2>{sections["builds"]}</section>',
+            f'<section class="title-section" id="release"><h2>Release</h2>{sections["release"]}</section>',
+            f'<section class="title-section" id="conditions"><h2>Approval conditions</h2>{sections["conditions"]}</section>',
+        ])
+    else:
+        section_html.extend([
+            _authoring_actions(report, title_id, csrf_token),
+            _recent_jobs(report),
+            f'<section class="title-section" id="pending"><h2>Awaiting acceptance</h2>{sections["pending"]}</section>',
+            _workflow_actions(report, title_id, csrf_token),
+            ''.join(f'<section class="title-section" id="{name}"><h2>{label}</h2>{sections[key]}</section>' for name, label, key in (
+                ("planning", "Planning", "planning"), ("chapters", "Chapters", "chapters"),
+                ("editorial", "Editorial and canon", "editorial"), ("verification", "Checks and rights", "verification"),
+                ("builds", "Builds", "builds"), ("release", "Release", "release"),
+                ("provider", "Provider and budget", "provider"), ("conditions", "Approval conditions", "conditions"))),
+        ])
     body = (
         f'<p class="breadcrumb"><a href="/">Workspace</a> / '
         f'<a href="/projects/{_e(quote(project_id or "", safe=""))}">Project</a> / Title</p>'
         f'<header class="title-heading"><div><h1>{_e(title.get("working_title"))}</h1>'
         f'<p>{_e(title_id)} · {_e(title.get("status"))}</p></div>{_status(attention_label, "blocked" if "items need" in attention_label else "ready")}</header>'
         + _stage_banner(report)
-        + '<nav class="section-nav" aria-label="Title sections">'
-        + ''.join(f'<a href="#{name}">{label}</a>' for name, label in (
-            ("overview", "Overview"), ("authoring", "Book authoring"), ("jobs", "Recent jobs"),
-            ("pending", "Awaiting acceptance"), ("actions", "Actions"),
-            ("planning", "Planning"), ("chapters", "Chapters"),
-            ("editorial", "Editorial and canon"), ("verification", "Verification and rights"),
-            ("builds", "Builds"), ("release", "Release"), ("provider", "Provider and budget"),
-            ("conditions", "Approval conditions"))) + '</nav>'
-        + f'<section class="title-section" id="overview"><h2>Overview</h2><p>Project <a href="/projects/{_e(quote(project_id or "", safe=""))}">{_e(project_id or "—")}</a></p>'
+        + f'<nav class="section-nav title-view-nav" id="title-workspace" aria-label="Title workspaces">{view_links}</nav>'
+        + f'<section class="title-section title-overview" id="overview"><h2>Overview</h2><p>Project <a href="/projects/{_e(quote(project_id or "", safe=""))}">{_e(project_id or "—")}</a></p>'
         f'<p>{_e(report.get("chapter_lifecycle", {}).get("accepted_chapter_count", 0))} accepted chapters · '
         f'{len(blockers)} verification blockers</p></section>'
         + (f'<div class="action-notice {"action-error" if error else "action-success"}" role="status">{_e(notice)}</div>' if notice else '')
-        + _authoring_actions(report, title_id, csrf_token)
-        + '<section class="title-section" id="jobs"><h2>Recent jobs</h2><p>Check the result and usage before starting another paid request. If a connection fails, inspect the job before retrying.</p>'
-        + _records([
-            f'<li><strong>{_e(job.get("job_id"))}</strong><span>{_e(job.get("job_type"))} · '
-            f'{_e(job.get("error") or job.get("provider_billing_warning") or job.get("usage_event_id") or "No usage event")}</span>'
-            f'{_status(job.get("status"), "ready" if job.get("status") == "success" else "blocked")}</li>'
-            for job in reversed(report.get("jobs", [])[-8:])], "No jobs recorded yet.")
-        + '</section>'
-        + f'<section class="title-section" id="pending"><h2>Awaiting acceptance</h2>{sections["pending"]}</section>'
-        + _workflow_actions(report, title_id, csrf_token)
-        + ''.join(f'<section class="title-section" id="{name}"><h2>{label}</h2>{sections[key]}</section>' for name, label, key in (
-            ("planning", "Planning", "planning"), ("chapters", "Chapters", "chapters"),
-            ("editorial", "Editorial and canon", "editorial"), ("verification", "Verification and rights", "verification"),
-            ("builds", "Builds", "builds"), ("release", "Release", "release"),
-            ("provider", "Provider and budget", "provider"), ("conditions", "Approval conditions", "conditions")))
-        + f'<section class="title-section"><h2>Inspection</h2><p>{_e(len(report.get("inconsistencies", [])))} inconsistencies</p>'
+        + ''.join(section_html)
+        + f'<section class="title-section inspection-summary"><h2>Inspection</h2><p>{_e(len(report.get("inconsistencies", [])))} inconsistencies</p>'
         + ("<ul>" + ''.join(f'<li>{_e(item)}</li>' for item in report.get("continuity", {}).get("warnings", [])) + "</ul>"
            if report.get("continuity", {}).get("warnings") else '<p class="empty-note">No continuity inspection warnings.</p>')
         + '</section>'
@@ -725,11 +782,11 @@ def render_help(csrf_token: str = "") -> str:
         'content only after your explicit review and acceptance.</p></li>'
         '<li id="step-verify"><div class="help-step-head"><span class="help-step-number">5</span>'
         '<div><p class="help-step-phase">Check</p><h3>Resolve sources, claims, and rights</h3></div></div>'
-        '<p>Under <strong>Workflow actions → Verification checks</strong>, run the checks that fit your book. '
-        'Scripture and quotation placeholders, sources, claims, research, and third-party material can each '
+        '<p>Under <strong>Workspace → Checks and rights</strong>, run the checks that fit your book. '
+        'Placeholders, quotations, sources, claims, research, and third-party material can each '
         'be flagged for a human decision with evidence. The available checks depend on what your manuscript needs.</p>'
-        '<p class="help-step-outcome">A placeholder such as <code>[SCRIPTURE NEEDED]</code> remains a blocker '
-        'until a person supplies and verifies an appropriate reference. The system does not invent one.</p></li>'
+        '<p class="help-step-outcome">A placeholder or unresolved source remains a blocker until a person '
+        'supplies and verifies appropriate evidence. The system does not invent references.</p></li>'
         '<li id="step-release"><div class="help-step-head"><span class="help-step-number">6</span>'
         '<div><p class="help-step-phase">Prepare</p><h3>Build and review the release packet</h3></div></div>'
         '<p>Choose <strong>Create Markdown build</strong> to assemble accepted chapters. Inspect the build and '
@@ -902,9 +959,9 @@ def render_review(dossier: dict, csrf_token: str, *, notice: str = "", error: bo
         fields += '<label>Rationale<textarea name="rationale" required maxlength="2000" rows="3"></textarea></label>' if kind in {"release", "verification", "rights"} else ''
     if kind == "verification":
         fields += ('<label>Evidence reference<input name="evidence_reference" maxlength="500"></label>'
-                   '<label>Exact Scripture or source reference, if applicable<input name="proposed_reference" maxlength="200"></label>'
+                   '<label>Exact reference or source, if applicable<input name="proposed_reference" maxlength="200"></label>'
                    '<label>Translation or source policy, if applicable<input name="source_policy" maxlength="500"></label>'
-                   '<p class="muted">Verified decisions require evidence. Scripture verification also requires an exact reference and source policy.</p>')
+                   '<p class="muted">Verified decisions require evidence and an exact reference or source policy where applicable.</p>')
     fields += ('<label class="review-confirm"><input type="checkbox" name="confirm_consequences" value="yes" required>'
                ' I reviewed the artefact, provenance, findings, blockers, conditions, and consequences shown above.</label>')
     buttons = ''.join(

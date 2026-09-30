@@ -98,12 +98,19 @@ def test_workspace_server_is_loopback_read_only_and_serves_packaged_assets(tmp_p
         response = connection.getresponse()
         title_page = response.read().decode("utf-8")
         assert response.status == 200
-        assert "Provider and budget" in title_page
-        assert "Verification and rights" in title_page
-        assert "Shape your concept" in title_page
+        assert "What do you need to do?" in title_page
+        assert "Authoring journey" in title_page
+        assert "Checks and rights" in title_page
         assert "stage-tracker" in title_page
-        assert "Verification checks" in title_page
-        assert "Scan manuscript placeholders" in title_page
+        assert "Scripture" not in title_page
+
+        connection.request("GET", f"/titles/{title_id}?view=all")
+        response = connection.getresponse()
+        title_page = response.read().decode("utf-8")
+        assert "Provider and budget" in title_page
+        assert "Verification and rights" not in title_page
+        assert "Verification checks" not in title_page
+        assert "Scan accepted manuscript" in title_page
         assert "Scan Scripture placeholders" not in title_page
 
         connection.request("GET", "/static/workspace.css")

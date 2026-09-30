@@ -75,11 +75,11 @@ def test_workspace_actions_require_token_and_reject_cross_origin(tmp_path: Path)
         assert response.status == 403
         assert inspect_title(tmp_path, title_id)["verification"]["items"] == []
 
-        connection.request("GET", f"/titles/{title_id}")
+        connection.request("GET", f"/titles/{title_id}?view=checks")
         page = connection.getresponse().read().decode("utf-8")
         token = re.search(r'name="csrf_token" value="([^"]+)"', page).group(1)
         assert "Workflow actions" in page
-        assert "Create Markdown build" in page
+        assert "Scan accepted manuscript" in page
         assert "Create release candidate" not in page  # No build exists yet.
 
         response, _ = _post(connection, title_id, "scan-scripture", {"csrf_token": token},

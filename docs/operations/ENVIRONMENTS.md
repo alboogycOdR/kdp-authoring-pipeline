@@ -91,20 +91,19 @@ Post-deployment checks returned HTTP 200 for the loopback health endpoint, the T
 
 The active systemd drop-in `/home/clawusr/.config/systemd/user/kdp-workspace.service.d/90-release-197cd7b.conf` sets `PYTHONPATH` to the current `main` checkout. To use the preserved detached release instead, change that path to `/home/clawusr/apps/kdp-authoring-pipeline-release-197cd7b/src`, reload the user manager, and restart the service. The pre-deployment prompt archive is in the backup directory above; use it if reverting to older code that cannot select among v1.0 and v1.1 prompt versions. If database recovery is required, stop the service and restore the paired SQLite database and `projects/` archive together; restoring that pre-deployment backup will discard any staging work created after its timestamp.
 
-## Workspace password login code — not yet deployed
+## Workspace password login deployment — 2026-09-30
 
-The development branch `codex/workspace-password-auth` adds a single configured username,
-scrypt password verification, CSRF-protected sign-in/sign-out, a short session cookie, and a
-30-day **Remember me** cookie. This code has not been deployed to `clawsrv`; the currently
-running staging service therefore remains unauthenticated. Do not treat this implementation
-as an access boundary on staging until it is reviewed, deployed, configured, and smoke-tested.
+The reviewed revision `8ff7fea` from `codex/workspace-password-auth` is deployed to the staging
+checkout in detached-head mode. It adds a single configured username, scrypt password
+verification, CSRF-protected sign-in/sign-out, a short session cookie, and a 30-day
+**Remember me** cookie. The owner-only auth file is configured outside the repository.
 
 The app fails closed when the account is missing. The staging service template now reads the
 out-of-repository owner-only file `/home/clawusr/.config/kdp-workspace/auth.env` and requires
-`KDP_WORKSPACE_COOKIE_SECURE=true`. Generate the scrypt hash with the hidden-prompt
-`kdp-staging workspace password-hash` command and a separate random session key with
-`kdp-staging workspace session-secret`; store both only in the `0600` auth file with the
-operator username. The browser-facing route must use HTTPS for the Secure session cookie to
-work and protect credentials in transit. Do not apply the deployment until the Tailscale-only
-HTTPS ingress and existing ACL prerequisites above have been verified. Rotating either the
-password hash or signing secret invalidates existing sessions.
+`KDP_WORKSPACE_COOKIE_SECURE=true`. The browser-facing route uses HTTPS for the Secure session
+cookie and is available through the tailnet-only Tailscale Serve route
+`https://clawsrv.tailbb9d39.ts.net:8767/`. Tailscale Serve owns port 8767 and forwards to
+loopback Caddy, which forwards to the loopback Workspace on port 8766. The existing public
+Funnel on port 443 was preserved. Smoke tests returned HTTP 200 for `/healthz` and the login
+page, and both user services are active. Rotating either the password hash or signing secret
+invalidates existing sessions.

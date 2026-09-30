@@ -449,6 +449,41 @@ def _action_form(title_id: str, action: str, token: str, label: str, fields: str
             f'{fields}<button type="submit">{_e(label)}</button></form>')
 
 
+def _authoring_stage_open(report: dict, stage: str) -> str:
+    """Keep the title page focused on the stage the operator is in."""
+    status = (report.get("title") or {}).get("status", "IDEA")
+    active = {"IDEA": "concept", "VALIDATED": "planning", "PLANNED": "drafting",
+              "DRAFTING": "drafting"}.get(status, "concept")
+    return " open" if active == stage else ""
+
+
+def _stage_banner(report: dict) -> str:
+    title = report.get("title") or {}
+    status = title.get("status", "IDEA")
+    stages = (("IDEA", "Idea"), ("VALIDATED", "Planning"), ("PLANNED", "Drafting"),
+              ("DRAFTING", "Review"), ("EDITING", "Verify"), ("PREFLIGHT_PASSED", "Release"))
+    current_index = next((i for i, (key, _) in enumerate(stages) if key == status), 0)
+    if status == "IDEA":
+        next_title, next_copy, next_href = "Shape your concept", "Start by enabling concept review, then develop the idea you want to write.", "#authoring"
+    elif status == "VALIDATED":
+        next_title, next_copy, next_href = "Plan the book", "Create and accept the positioning, brief, outline, and chapter cards.", "#authoring"
+    elif status == "PLANNED":
+        next_title, next_copy, next_href = "Start drafting", "Move into drafting, then work through one chapter at a time.", "#authoring"
+    elif status == "DRAFTING":
+        next_title, next_copy, next_href = "Draft and review the next chapter", "Read each experimental result before accepting it into the manuscript.", "#authoring"
+    else:
+        next_title, next_copy, next_href = "Review what needs attention", "Use the sections below to resolve findings, verification items, or release conditions.", "#pending"
+    items = []
+    for index, (key, label) in enumerate(stages):
+        state = "current" if index == current_index else ("complete" if index < current_index else "upcoming")
+        items.append(f'<li class="stage-{state}"><span>{index + 1}</span>{_e(label)}</li>')
+    return ('<section class="next-step" aria-labelledby="next-step-title">'
+            f'<div class="next-step-copy"><p class="eyebrow">Current stage · {_e(dict(stages).get(status, status.replace("_", " ").title()))}</p>'
+            f'<h2 id="next-step-title">{_e(next_title)}</h2><p>{_e(next_copy)}</p>'
+            f'<a class="next-step-link" href="{_e(next_href)}">Go to the next step</a></div>'
+            f'<ol class="stage-tracker" aria-label="Book journey">{"".join(items)}</ol></section>')
+
+
 def _operator() -> str:
     return _actor_field()
 
@@ -477,7 +512,7 @@ def _authoring_actions(report: dict, title_id: str, token: str) -> str:
                  f'per request ${_e(budget.get("max_run_estimated_cost_usd"))}. '
                  'Each generation action is one request; review its result before another.</p>')
     concept = (
-        '<div class="action-group"><h3>1. Develop your idea</h3><p>Your saved idea informs the audience brief. Review each experimental result before continuing.</p>'
+        f'<details class="action-group workflow-stage"{_authoring_stage_open(report, "concept")}><summary><h3>1. Develop your idea</h3></summary><p>Your saved idea informs the audience brief. Review each experimental result before continuing.</p>'
         + (_action_form(title_id, "save-idea", token, "Save starting idea",
             _operator() + '<label>Intended reader<textarea name="audience" required maxlength="1000" rows="2"></textarea></label>'
             + '<label>Book idea<textarea name="idea" required maxlength="4000" rows="4"></textarea></label>')
@@ -498,23 +533,23 @@ def _authoring_actions(report: dict, title_id: str, token: str) -> str:
         + '<p>Open the concept brief under Awaiting acceptance to review and approve it yourself.</p></details>'
         + '<details><summary>Create drafting brief after concept approval</summary>'
         + _action_form(title_id, "concept-drafting-brief", token, "Generate drafting brief", select("concept.brief", accepted=True) + cost)
-        + '</details></div>'
+        + '</details></details>'
     )
     planning = (
-        '<div class="action-group"><h3>2. Plan the book</h3><p>Accept each planning artefact from its review page before advancing.</p>'
+        f'<details class="action-group workflow-stage"{_authoring_stage_open(report, "planning")}><summary><h3>2. Plan the book</h3></summary><p>Accept each planning artefact from its review page before advancing.</p>'
         + _action_form(title_id, "positioning", token, "Generate positioning", cost)
         + _action_form(title_id, "advance-validated", token, "Advance to validated", _operator())
         + _action_form(title_id, "book-brief", token, "Generate book brief", cost)
         + _action_form(title_id, "outline", token, "Generate outline", cost)
         + _action_form(title_id, "chapter-card", token, "Generate chapter card", chapter + cost)
         + _action_form(title_id, "advance-planned", token, "Advance to planned", _operator())
-        + '</div>'
+        + '</details>'
     )
     chapter_source = select("chapter.draft", "chapter.revision", accepted=False)
     editorial_passes = ''.join(f'<option value="{_e(p)}">{_e(p.replace("-", " ").title())}</option>'
                                for p in ("voice", "line", "copy", "reader-experience", "consistency"))
     drafting = (
-        '<div class="action-group"><h3>3. Draft and review chapters</h3><p>Work on one chapter at a time. Generated chapters remain experimental until you accept them.</p>'
+        f'<details class="action-group workflow-stage"{_authoring_stage_open(report, "drafting")}><summary><h3>3. Draft and review chapters</h3></summary><p>Work on one chapter at a time. Generated chapters remain experimental until you accept them.</p>'
         + _action_form(title_id, "advance-drafting", token, "Start drafting stage", _operator())
         + _action_form(title_id, "draft-chapter", token, "Draft one chapter", chapter + cost)
         + '<details><summary>Analyze a draft</summary>'
@@ -526,7 +561,7 @@ def _authoring_actions(report: dict, title_id: str, token: str) -> str:
         + _action_form(title_id, "revise-chapter", token, "Generate a revision", chapter + chapter_source + cost)
         + _action_form(title_id, "chapter-summary", token, "Save accepted chapter summary", chapter +
             select("chapter.accepted", accepted=True) + '<label>Continuity summary<textarea name="summary" required maxlength="3000" rows="3"></textarea></label>' + _operator())
-        + '</details><p>Accept the chosen chapter draft or revision from Awaiting acceptance.</p></div>'
+        + '</details><p>Accept the chosen chapter draft or revision from Awaiting acceptance.</p></details>'
     )
     return ('<section class="title-section workflow-actions" id="authoring"><h2>Book authoring</h2>'
             + cost_note + '<div class="action-grid">' + concept + planning + drafting + '</div></section>')
@@ -564,8 +599,9 @@ def _workflow_actions(report: dict, title_id: str, token: str) -> str:
         '<section class="title-section workflow-actions" id="actions"><h2>Workflow actions</h2>'
         '<p>Each action updates the local record through an audited service. Actions are recorded under the signed-in account.</p>'
         '<div class="action-grid">'
-        '<div class="action-group"><h3>Verification</h3><p>Queue placeholders from accepted chapters; this does not verify references or change manuscript text.</p>'
-        + _action_form(title_id, "scan-scripture", token, "Scan Scripture placeholders")
+        '<div class="action-group"><h3>Verification checks</h3><p>Run checks on accepted chapters and record human decisions. Checks never change manuscript text or verify a source automatically.</p>'
+        + _action_form(title_id, "scan-scripture", token, "Scan manuscript placeholders")
+        + '<p class="muted verification-note">This scan currently queues Scripture placeholders when they are present. Use verification flags for sources, claims, research, and other checks.</p>'
         + '<details><summary>Add a verification flag</summary>'
         + _action_form(title_id, "add-flag", token, "Add flag", flag_fields) + '</details>'
         + '<details><summary>Record rights material</summary>'
@@ -597,7 +633,8 @@ def render_title(snapshot: dict, title_id: str, *, csrf_token: str = "", notice:
         f'<a href="/projects/{_e(quote(project_id or "", safe=""))}">Project</a> / Title</p>'
         f'<header class="title-heading"><div><h1>{_e(title.get("working_title"))}</h1>'
         f'<p>{_e(title_id)} · {_e(title.get("status"))}</p></div>{_status(attention_label, "blocked" if "items need" in attention_label else "ready")}</header>'
-        '<nav class="section-nav" aria-label="Title sections">'
+        + _stage_banner(report)
+        + '<nav class="section-nav" aria-label="Title sections">'
         + ''.join(f'<a href="#{name}">{label}</a>' for name, label in (
             ("overview", "Overview"), ("authoring", "Book authoring"), ("jobs", "Recent jobs"),
             ("pending", "Awaiting acceptance"), ("actions", "Actions"),
@@ -688,9 +725,9 @@ def render_help(csrf_token: str = "") -> str:
         'content only after your explicit review and acceptance.</p></li>'
         '<li id="step-verify"><div class="help-step-head"><span class="help-step-number">5</span>'
         '<div><p class="help-step-phase">Check</p><h3>Resolve sources, claims, and rights</h3></div></div>'
-        '<p>Under <strong>Workflow actions → Verification</strong>, scan accepted chapters for Scripture '
-        'placeholders and add flags for claims or research that need checking. Record any third-party material '
-        'that needs rights review. Open each verification or rights item to record a human decision with evidence.</p>'
+        '<p>Under <strong>Workflow actions → Verification checks</strong>, run the checks that fit your book. '
+        'Scripture and quotation placeholders, sources, claims, research, and third-party material can each '
+        'be flagged for a human decision with evidence. The available checks depend on what your manuscript needs.</p>'
         '<p class="help-step-outcome">A placeholder such as <code>[SCRIPTURE NEEDED]</code> remains a blocker '
         'until a person supplies and verifies an appropriate reference. The system does not invent one.</p></li>'
         '<li id="step-release"><div class="help-step-head"><span class="help-step-number">6</span>'

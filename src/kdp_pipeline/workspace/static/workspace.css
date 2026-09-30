@@ -236,6 +236,20 @@ h2 { margin: 0; font-size: 1.2rem; }
 .title-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1.2rem clamp(1rem, 3vw, 1.7rem); background: var(--surface); border-left: 5px solid var(--brand-orange); box-shadow: var(--shadow); }
 .title-heading p { margin: .45rem 0 0; color: var(--muted); }
 .title-heading > .status { max-width: 18rem; }
+.next-step { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(280px, .75fr); gap: 1.5rem; align-items: center; margin: 1rem 0; padding: clamp(1.1rem, 3vw, 1.6rem); background: var(--accent); color: var(--accent-ink); border-bottom: 5px solid var(--brand-orange); box-shadow: var(--shadow); }
+.next-step-copy { min-width: 0; }
+.next-step .eyebrow { margin: 0 0 .35rem; color: var(--brand-orange); font-size: .78rem; font-weight: 750; letter-spacing: .04em; text-transform: uppercase; }
+.next-step h2 { margin: 0; font: 600 clamp(1.35rem, 2.4vw, 2rem)/1.15 Georgia, "Times New Roman", serif; }
+.next-step-copy > p:not(.eyebrow) { max-width: 56ch; margin: .55rem 0 1rem; color: color-mix(in srgb, var(--accent-ink) 78%, transparent); }
+.next-step-link { display: inline-block; padding: .48rem .75rem; background: var(--brand-orange); color: #000; font-weight: 700; text-decoration: none; }
+.next-step-link:hover { filter: brightness(1.08); }
+.stage-tracker { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: .35rem; margin: 0; padding: 0; list-style: none; }
+.stage-tracker li { display: grid; gap: .35rem; color: color-mix(in srgb, var(--accent-ink) 55%, transparent); font-size: .78rem; font-weight: 650; }
+.stage-tracker li span { display: grid; width: 1.7rem; height: 1.7rem; place-items: center; border: 1px solid currentColor; border-radius: 50%; }
+.stage-tracker .stage-current { color: var(--brand-orange); }
+.stage-tracker .stage-current span { background: var(--brand-orange); color: #000; border-color: var(--brand-orange); }
+.stage-tracker .stage-complete { color: color-mix(in srgb, var(--accent-ink) 86%, transparent); }
+.stage-tracker .stage-complete span { background: color-mix(in srgb, var(--brand-orange) 25%, transparent); border-color: var(--brand-orange); }
 .section-nav { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; gap: .25rem; margin: 1rem 0; padding: .45rem; background: var(--surface-raised); border: 1px solid var(--line); box-shadow: var(--shadow); }
 .section-nav a { padding: .35rem .55rem; border-radius: 3px; font-size: .9rem; }
 .section-nav a:hover { background: var(--surface-muted); }
@@ -244,6 +258,14 @@ h2 { margin: 0; font-size: 1.2rem; }
 .workflow-actions > p { color: var(--muted); max-width: 75ch; }
 .action-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
 .action-group { min-width: 0; padding: 1rem; border: 1px solid var(--line); background: var(--surface-raised); }
+.workflow-stage { align-self: start; }
+.workflow-stage > summary { display: block; margin: -1rem; padding: 1rem; list-style: none; }
+.workflow-stage > summary::-webkit-details-marker { display: none; }
+.workflow-stage > summary::after { float: right; color: var(--brand-orange); content: "+"; font-size: 1.25rem; line-height: 1; }
+.workflow-stage[open] > summary { margin-bottom: .8rem; border-bottom: 1px solid var(--line); }
+.workflow-stage[open] > summary::after { content: "−"; }
+.workflow-stage > summary h3 { display: inline; }
+.verification-note { font-size: .86rem; }
 .action-group h3 { margin: 0; font-size: 1.05rem; }
 .action-group p { margin: .35rem 0 .8rem; color: var(--muted); }
 .action-group form { display: grid; gap: .55rem; margin-top: .75rem; padding-top: .75rem; border-top: 1px solid var(--line); }
@@ -339,6 +361,8 @@ body[data-theme="brand"] .help-step-number { border-color: var(--brand-orange); 
   .attention-grid { grid-template-columns: 1fr; }
   .project-row, .title-row { grid-template-columns: 1fr; gap: .35rem; }
   .title-heading { align-items: flex-start; flex-direction: column; }
+  .next-step { grid-template-columns: 1fr; }
+  .stage-tracker { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .record-list li { grid-template-columns: 1fr auto; }
   .record-list li span { grid-column: 1 / -1; grid-row: 2; }
   .section-nav { position: static; }

@@ -100,6 +100,11 @@ def test_workspace_server_is_loopback_read_only_and_serves_packaged_assets(tmp_p
         assert response.status == 200
         assert "Provider and budget" in title_page
         assert "Verification and rights" in title_page
+        assert "Shape your concept" in title_page
+        assert "stage-tracker" in title_page
+        assert "Verification checks" in title_page
+        assert "Scan manuscript placeholders" in title_page
+        assert "Scan Scripture placeholders" not in title_page
 
         connection.request("GET", "/static/workspace.css")
         response = connection.getresponse()
